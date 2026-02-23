@@ -367,12 +367,6 @@ void TxtReaderActivity::render(Activity::RenderLock&&) {
   loadPageAtOffset(offset, currentPageLines, nextOffset);
 
   renderer.clearScreen();
-  renderer.clearFontCache();
-  std::string pageText;
-  for (const auto& line : currentPageLines) {
-    pageText += line;
-  }
-  renderer.prewarmFontCache(cachedFontId, pageText.c_str());
   renderPage();
 
   // Save progress
@@ -426,7 +420,12 @@ void TxtReaderActivity::renderPage() {
     }
   };
 
-  // First pass: BW rendering
+  // Deferred rendering: scan pass accumulates text, then prewarm, then real render
+  auto scope = renderer.deferTextRendering();
+  renderLines();  // scan pass — text accumulated, no drawing
+  scope.endScanAndPrewarm();
+
+  // BW rendering
   renderLines();
   renderStatusBar(orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
 
@@ -459,6 +458,7 @@ void TxtReaderActivity::renderPage() {
     // Restore BW buffer
     renderer.restoreBwBuffer();
   }
+  // scope destructor clears font cache
 }
 
 void TxtReaderActivity::renderStatusBar(const int orientedMarginRight, const int orientedMarginBottom,

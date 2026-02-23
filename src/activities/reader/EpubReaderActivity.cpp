@@ -612,7 +612,6 @@ void EpubReaderActivity::render(Activity::RenderLock&& lock) {
       return;
     }
     const auto start = millis();
-    renderer.clearFontCache();
     renderContents(std::move(p), orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
     LOG_DBG("ERS", "Rendered page in %dms", millis() - start);
   }
@@ -642,11 +641,11 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   const auto t0 = millis();
   renderer.resetFontStats();
 
-  // Pre-scan page text to warm the font cache with needed glyph groups
+  // Deferred rendering: scan pass accumulates text, then prewarm, then real render
   const uint32_t heapBefore = esp_get_free_heap_size();
-  std::string pageText;
-  page->collectText(pageText);
-  renderer.prewarmFontCache(SETTINGS.getReaderFontId(), pageText.c_str(), page->getDominantStyle());
+  auto scope = renderer.deferTextRendering();
+  page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);  // scan pass
+  scope.endScanAndPrewarm();
   const uint32_t heapAfter = esp_get_free_heap_size();
   renderer.logFontStats("prewarm");
   const auto tPrewarm = millis();

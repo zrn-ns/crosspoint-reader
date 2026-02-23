@@ -5,7 +5,9 @@
 
 class FontDecompressor;
 
+#include <cstring>
 #include <map>
+#include <string>
 
 #include "Bitmap.h"
 
@@ -39,6 +41,13 @@ class GfxRenderer {
   uint8_t* bwBufferChunks[BW_BUFFER_NUM_CHUNKS] = {nullptr};
   std::map<int, EpdFontFamily> fontMap;
   FontDecompressor* fontDecompressor = nullptr;
+
+  enum class DeferredMode : uint8_t { None, Scanning };
+  mutable DeferredMode deferredMode_ = DeferredMode::None;
+  mutable std::string scanText_;
+  mutable uint32_t scanStyleCounts_[4] = {};
+  mutable int scanFontId_ = -1;
+
   void renderChar(const EpdFontFamily& fontFamily, uint32_t cp, int* x, int* y, bool pixelState,
                   EpdFontFamily::Style style) const;
   void freeBwBufferChunks();
@@ -135,6 +144,23 @@ class GfxRenderer {
 
   // Font helpers
   const uint8_t* getGlyphBitmap(const EpdFontData* fontData, const EpdGlyph* glyph) const;
+
+  // Deferred rendering: scan pass accumulates text for font prewarming, then real render draws with warm cache
+  class DeferredRenderScope {
+   public:
+    explicit DeferredRenderScope(GfxRenderer& renderer);
+    ~DeferredRenderScope();
+    void endScanAndPrewarm();
+    DeferredRenderScope(DeferredRenderScope&& other) noexcept;
+    DeferredRenderScope& operator=(DeferredRenderScope&&) = delete;
+    DeferredRenderScope(const DeferredRenderScope&) = delete;
+    DeferredRenderScope& operator=(const DeferredRenderScope&) = delete;
+
+   private:
+    GfxRenderer* renderer_;
+    bool active_ = true;
+  };
+  DeferredRenderScope deferTextRendering();
 
   // Low level functions
   uint8_t* getFrameBuffer() const;

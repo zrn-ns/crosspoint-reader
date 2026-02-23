@@ -42,8 +42,10 @@ class GfxRenderer {
   std::map<int, EpdFontFamily> fontMap;
   FontDecompressor* fontDecompressor = nullptr;
 
-  enum class DeferredMode : uint8_t { None, Scanning };
-  mutable DeferredMode deferredMode_ = DeferredMode::None;
+  // Font prewarm scan state. Mutable because drawText() is const — pragmatic
+  // compromise to avoid cascading non-const signature changes through the codebase.
+  enum class ScanMode : uint8_t { None, Scanning };
+  mutable ScanMode scanMode_ = ScanMode::None;
   mutable std::string scanText_;
   mutable uint32_t scanStyleCounts_[4] = {};
   mutable int scanFontId_ = -1;
@@ -145,22 +147,24 @@ class GfxRenderer {
   // Font helpers
   const uint8_t* getGlyphBitmap(const EpdFontData* fontData, const EpdGlyph* glyph) const;
 
-  // Deferred rendering: scan pass accumulates text for font prewarming, then real render draws with warm cache
-  class DeferredRenderScope {
+  // RAII scope for font cache prewarming. A scan pass accumulates text via drawText(),
+  // then endScanAndPrewarm() decompresses the needed glyph groups. Subsequent render
+  // passes hit the warm cache. Destructor clears the cache.
+  class FontPrewarmScope {
    public:
-    explicit DeferredRenderScope(GfxRenderer& renderer);
-    ~DeferredRenderScope();
+    explicit FontPrewarmScope(GfxRenderer& renderer);
+    ~FontPrewarmScope();
     void endScanAndPrewarm();
-    DeferredRenderScope(DeferredRenderScope&& other) noexcept;
-    DeferredRenderScope& operator=(DeferredRenderScope&&) = delete;
-    DeferredRenderScope(const DeferredRenderScope&) = delete;
-    DeferredRenderScope& operator=(const DeferredRenderScope&) = delete;
+    FontPrewarmScope(FontPrewarmScope&& other) noexcept;
+    FontPrewarmScope& operator=(FontPrewarmScope&&) = delete;
+    FontPrewarmScope(const FontPrewarmScope&) = delete;
+    FontPrewarmScope& operator=(const FontPrewarmScope&) = delete;
 
    private:
     GfxRenderer* renderer_;
     bool active_ = true;
   };
-  DeferredRenderScope deferTextRendering();
+  FontPrewarmScope createFontPrewarmScope();
 
   // Low level functions
   uint8_t* getFrameBuffer() const;

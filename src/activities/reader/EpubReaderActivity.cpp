@@ -656,9 +656,9 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   const auto t0 = millis();
   renderer.resetFontStats();
 
-  // Deferred rendering: scan pass accumulates text, then prewarm, then real render
+  // Font prewarm: scan pass accumulates text, then prewarm, then real render
   const uint32_t heapBefore = esp_get_free_heap_size();
-  auto scope = renderer.deferTextRendering();
+  auto scope = renderer.createFontPrewarmScope();
   page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);  // scan pass
   scope.endScanAndPrewarm();
   const uint32_t heapAfter = esp_get_free_heap_size();

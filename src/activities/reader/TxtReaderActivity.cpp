@@ -420,8 +420,8 @@ void TxtReaderActivity::renderPage() {
     }
   };
 
-  // Deferred rendering: scan pass accumulates text, then prewarm, then real render
-  auto scope = renderer.deferTextRendering();
+  // Font prewarm: scan pass accumulates text, then prewarm, then real render
+  auto scope = renderer.createFontPrewarmScope();
   renderLines();  // scan pass — text accumulated, no drawing
   scope.endScanAndPrewarm();
 

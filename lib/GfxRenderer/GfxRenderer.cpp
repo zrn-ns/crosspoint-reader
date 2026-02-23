@@ -42,10 +42,10 @@ void GfxRenderer::resetFontStats() {
   if (fontDecompressor) fontDecompressor->resetStats();
 }
 
-// --- DeferredRenderScope implementation ---
+// --- FontPrewarmScope implementation ---
 
-GfxRenderer::DeferredRenderScope::DeferredRenderScope(GfxRenderer& renderer) : renderer_(&renderer) {
-  renderer_->deferredMode_ = DeferredMode::Scanning;
+GfxRenderer::FontPrewarmScope::FontPrewarmScope(GfxRenderer& renderer) : renderer_(&renderer) {
+  renderer_->scanMode_ = ScanMode::Scanning;
   renderer_->clearFontCache();
   renderer_->resetFontStats();
   renderer_->scanText_.clear();
@@ -53,8 +53,8 @@ GfxRenderer::DeferredRenderScope::DeferredRenderScope(GfxRenderer& renderer) : r
   renderer_->scanFontId_ = -1;
 }
 
-void GfxRenderer::DeferredRenderScope::endScanAndPrewarm() {
-  renderer_->deferredMode_ = DeferredMode::None;
+void GfxRenderer::FontPrewarmScope::endScanAndPrewarm() {
+  renderer_->scanMode_ = ScanMode::None;
   if (renderer_->scanText_.empty()) return;
 
   // Determine dominant style from scan counts
@@ -71,19 +71,19 @@ void GfxRenderer::DeferredRenderScope::endScanAndPrewarm() {
   renderer_->scanText_.shrink_to_fit();
 }
 
-GfxRenderer::DeferredRenderScope::~DeferredRenderScope() {
+GfxRenderer::FontPrewarmScope::~FontPrewarmScope() {
   if (active_) {
     renderer_->clearFontCache();
-    renderer_->deferredMode_ = DeferredMode::None;
+    renderer_->scanMode_ = ScanMode::None;
   }
 }
 
-GfxRenderer::DeferredRenderScope::DeferredRenderScope(DeferredRenderScope&& other) noexcept
+GfxRenderer::FontPrewarmScope::FontPrewarmScope(FontPrewarmScope&& other) noexcept
     : renderer_(other.renderer_), active_(other.active_) {
   other.active_ = false;
 }
 
-GfxRenderer::DeferredRenderScope GfxRenderer::deferTextRendering() { return DeferredRenderScope(*this); }
+GfxRenderer::FontPrewarmScope GfxRenderer::createFontPrewarmScope() { return FontPrewarmScope(*this); }
 
 void GfxRenderer::begin() {
   frameBuffer = display.getFrameBuffer();
@@ -291,7 +291,7 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
     return;
   }
 
-  if (deferredMode_ == DeferredMode::Scanning) {
+  if (scanMode_ == ScanMode::Scanning) {
     scanText_ += text;
     if (scanFontId_ < 0) scanFontId_ = fontId;
     const uint8_t baseStyle = static_cast<uint8_t>(style) & 0x03;
@@ -345,7 +345,7 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
 }
 
 void GfxRenderer::drawLine(int x1, int y1, int x2, int y2, const bool state) const {
-  if (deferredMode_ == DeferredMode::Scanning) return;
+  if (scanMode_ == ScanMode::Scanning) return;
   if (x1 == x2) {
     if (y2 < y1) {
       std::swap(y1, y2);
@@ -658,7 +658,7 @@ void GfxRenderer::drawIcon(const uint8_t bitmap[], const int x, const int y, con
 
 void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, const int maxWidth, const int maxHeight,
                              const float cropX, const float cropY) const {
-  if (deferredMode_ == DeferredMode::Scanning) return;
+  if (scanMode_ == ScanMode::Scanning) return;
   // For 1-bit bitmaps, use optimized 1-bit rendering path (no crop support for 1-bit)
   if (bitmap.is1Bit() && cropX == 0.0f && cropY == 0.0f) {
     drawBitmap1Bit(bitmap, x, y, maxWidth, maxHeight);

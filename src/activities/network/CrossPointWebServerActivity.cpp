@@ -6,7 +6,6 @@
 #include <I18n.h>
 #include <WiFi.h>
 #include <esp_task_wdt.h>
-#include <qrcode.h>
 
 #include <cstddef>
 
@@ -16,6 +15,7 @@
 #include "activities/network/CalibreConnectActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/QrUtils.h"
 
 namespace {
 // AP Mode configuration
@@ -23,24 +23,19 @@ constexpr const char* AP_SSID = "CrossPoint-Reader";
 constexpr const char* AP_PASSWORD = nullptr;  // Open network for ease of use
 constexpr const char* AP_HOSTNAME = "crosspoint";
 constexpr uint8_t AP_CHANNEL = 1;
-constexpr uint8_t AP_MAX_CONNECTIONS = 1;
+constexpr uint8_t AP_MAX_CONNECTIONS = 4;
+constexpr int QR_CODE_WIDTH = 198;
+constexpr int QR_CODE_HEIGHT = 198;
 
 // DNS server for captive portal (redirects all DNS queries to our IP)
 DNSServer* dnsServer = nullptr;
 constexpr uint16_t DNS_PORT = 53;
 }  // namespace
 
-void CrossPointWebServerActivity::taskTrampoline(void* param) {
-  auto* self = static_cast<CrossPointWebServerActivity*>(param);
-  self->displayTaskLoop();
-}
-
 void CrossPointWebServerActivity::onEnter() {
   ActivityWithSubactivity::onEnter();
 
-  Serial.printf("[%lu] [WEBACT] [MEM] Free heap at onEnter: %d bytes\n", millis(), ESP.getFreeHeap());
-
-  renderingMutex = xSemaphoreCreateMutex();
+  LOG_DBG("WEBACT", "Free heap at onEnter: %d bytes", ESP.getFreeHeap());
 
   // Reset state
   state = WebServerActivityState::MODE_SELECTION;
@@ -49,17 +44,10 @@ void CrossPointWebServerActivity::onEnter() {
   connectedIP.clear();
   connectedSSID.clear();
   lastHandleClientTime = 0;
-  updateRequired = true;
-
-  xTaskCreate(&CrossPointWebServerActivity::taskTrampoline, "WebServerActivityTask",
-              2048,               // Stack size
-              this,               // Parameters
-              1,                  // Priority
-              &displayTaskHandle  // Task handle
-  );
+  requestUpdate();
 
   // Launch network mode selection subactivity
-  Serial.printf("[%lu] [WEBACT] Launching NetworkModeSelectionActivity...\n", millis());
+  LOG_DBG("WEBACT", "Launching NetworkModeSelectionActivity...");
   enterNewActivity(new NetworkModeSelectionActivity(
       renderer, mappedInput, [this](const NetworkMode mode) { onNetworkModeSelected(mode); },
       [this]() { onGoBack(); }  // Cancel goes back to home
@@ -69,7 +57,7 @@ void CrossPointWebServerActivity::onEnter() {
 void CrossPointWebServerActivity::onExit() {
   ActivityWithSubactivity::onExit();
 
-  Serial.printf("[%lu] [WEBACT] onExit start, free heap: %d\n", millis(), ESP.getFreeHeap());
+  LOG_DBG("WEBACT", "Free heap at onExit start: %d bytes", ESP.getFreeHeap());
 
   state = WebServerActivityState::SHUTTING_DOWN;
 
@@ -81,28 +69,30 @@ void CrossPointWebServerActivity::onExit() {
 
   // Stop DNS server if running (AP mode)
   if (dnsServer) {
+    LOG_DBG("WEBACT", "Stopping DNS server...");
     dnsServer->stop();
     delete dnsServer;
     dnsServer = nullptr;
   }
 
-  // Kill WiFi immediately — user explicitly requested exit, no need for
-  // graceful disconnect handshakes that can block for seconds.
-  WiFi.mode(WIFI_OFF);
-  delay(30);
+  // Brief wait for LWIP stack to flush pending packets
+  delay(50);
 
-  Serial.printf("[%lu] [WEBACT] WiFi OFF, free heap: %d\n", millis(), ESP.getFreeHeap());
-
-  // Acquire mutex before deleting task (waits for any in-progress render)
-  xSemaphoreTake(renderingMutex, portMAX_DELAY);
-  if (displayTaskHandle) {
-    vTaskDelete(displayTaskHandle);
-    displayTaskHandle = nullptr;
+  // Disconnect WiFi gracefully
+  if (isApMode) {
+    LOG_DBG("WEBACT", "Stopping WiFi AP...");
+    WiFi.softAPdisconnect(true);
+  } else {
+    LOG_DBG("WEBACT", "Disconnecting WiFi (graceful)...");
+    WiFi.disconnect(false);  // false = don't erase credentials, send disconnect frame
   }
-  vSemaphoreDelete(renderingMutex);
-  renderingMutex = nullptr;
+  delay(30);  // Allow disconnect frame to be sent
 
-  Serial.printf("[%lu] [WEBACT] onExit done, free heap: %d\n", millis(), ESP.getFreeHeap());
+  LOG_DBG("WEBACT", "Setting WiFi mode OFF...");
+  WiFi.mode(WIFI_OFF);
+  delay(30);  // Allow WiFi hardware to power down
+
+  LOG_DBG("WEBACT", "Free heap at onExit end: %d bytes", ESP.getFreeHeap());
 }
 
 void CrossPointWebServerActivity::onNetworkModeSelected(const NetworkMode mode) {
@@ -112,7 +102,7 @@ void CrossPointWebServerActivity::onNetworkModeSelected(const NetworkMode mode) 
   } else if (mode == NetworkMode::CREATE_HOTSPOT) {
     modeName = "Create Hotspot";
   }
-  Serial.printf("[%lu] [WEBACT] Network mode selected: %s\n", millis(), modeName);
+  LOG_DBG("WEBACT", "Network mode selected: %s", modeName);
 
   networkMode = mode;
   isApMode = (mode == NetworkMode::CREATE_HOTSPOT);
@@ -134,23 +124,23 @@ void CrossPointWebServerActivity::onNetworkModeSelected(const NetworkMode mode) 
 
   if (mode == NetworkMode::JOIN_NETWORK) {
     // STA mode - launch WiFi selection
-    Serial.printf("[%lu] [WEBACT] Turning on WiFi (STA mode)...\n", millis());
+    LOG_DBG("WEBACT", "Turning on WiFi (STA mode)...");
     WiFi.mode(WIFI_STA);
 
     state = WebServerActivityState::WIFI_SELECTION;
-    Serial.printf("[%lu] [WEBACT] Launching WifiSelectionActivity...\n", millis());
+    LOG_DBG("WEBACT", "Launching WifiSelectionActivity...");
     enterNewActivity(new WifiSelectionActivity(renderer, mappedInput,
                                                [this](const bool connected) { onWifiSelectionComplete(connected); }));
   } else {
     // AP mode - start access point
     state = WebServerActivityState::AP_STARTING;
-    updateRequired = true;
+    requestUpdate();
     startAccessPoint();
   }
 }
 
 void CrossPointWebServerActivity::onWifiSelectionComplete(const bool connected) {
-  Serial.printf("[%lu] [WEBACT] WifiSelectionActivity completed, connected=%d\n", millis(), connected);
+  LOG_DBG("WEBACT", "WifiSelectionActivity completed, connected=%d", connected);
 
   if (connected) {
     // Get connection info before exiting subactivity
@@ -162,7 +152,7 @@ void CrossPointWebServerActivity::onWifiSelectionComplete(const bool connected) 
 
     // Start mDNS for hostname resolution
     if (MDNS.begin(AP_HOSTNAME)) {
-      Serial.printf("[%lu] [WEBACT] mDNS started: http://%s.local/\n", millis(), AP_HOSTNAME);
+      LOG_DBG("WEBACT", "mDNS started: http://%s.local/", AP_HOSTNAME);
     }
 
     // Start the web server
@@ -178,22 +168,12 @@ void CrossPointWebServerActivity::onWifiSelectionComplete(const bool connected) 
 }
 
 void CrossPointWebServerActivity::startAccessPoint() {
-  Serial.printf("[%lu] [WEBACT] Starting Access Point mode...\n", millis());
-  Serial.printf("[%lu] [WEBACT] [MEM] Free heap before AP start: %d bytes\n", millis(), ESP.getFreeHeap());
+  LOG_DBG("WEBACT", "Starting Access Point mode...");
+  LOG_DBG("WEBACT", "Free heap before AP start: %d bytes", ESP.getFreeHeap());
 
   // Configure and start the AP
   WiFi.mode(WIFI_AP);
   delay(100);
-
-  // Explicitly configure AP network parameters BEFORE starting softAP.
-  // Without this, some devices fail to route traffic to the ESP32 after connecting,
-  // because the DHCP server may not advertise the correct gateway.
-  const IPAddress apLocalIP(192, 168, 4, 1);
-  const IPAddress apGateway(192, 168, 4, 1);
-  const IPAddress apSubnet(255, 255, 255, 0);
-  const bool configOk = WiFi.softAPConfig(apLocalIP, apGateway, apSubnet);
-  Serial.printf("[%lu] [WEBACT] softAPConfig(192.168.4.1) => %s\n", millis(), configOk ? "OK" : "FAILED");
-  delay(50);
 
   // Start soft AP
   bool apStarted;
@@ -205,7 +185,7 @@ void CrossPointWebServerActivity::startAccessPoint() {
   }
 
   if (!apStarted) {
-    Serial.printf("[%lu] [WEBACT] ERROR: Failed to start Access Point!\n", millis());
+    LOG_ERR("WEBACT", "ERROR: Failed to start Access Point!");
     onGoBack();
     return;
   }
@@ -219,29 +199,32 @@ void CrossPointWebServerActivity::startAccessPoint() {
   connectedIP = ipStr;
   connectedSSID = AP_SSID;
 
-  Serial.printf("[%lu] [WEBACT] Access Point started!\n", millis());
-  Serial.printf("[%lu] [WEBACT] SSID: %s\n", millis(), AP_SSID);
-  Serial.printf("[%lu] [WEBACT] IP: %s\n", millis(), connectedIP.c_str());
+  LOG_DBG("WEBACT", "Access Point started!");
+  LOG_DBG("WEBACT", "SSID: %s", AP_SSID);
+  LOG_DBG("WEBACT", "IP: %s", connectedIP.c_str());
 
-  // Start mDNS for hostname resolution (STA mode only — useless in AP mode
-  // where we control DNS and there's no upstream mDNS resolver)
-  Serial.printf("[%lu] [WEBACT] AP mode: skipping mDNS to save memory\n", millis());
+  // Start mDNS for hostname resolution
+  if (MDNS.begin(AP_HOSTNAME)) {
+    LOG_DBG("WEBACT", "mDNS started: http://%s.local/", AP_HOSTNAME);
+  } else {
+    LOG_DBG("WEBACT", "WARNING: mDNS failed to start");
+  }
 
   // Start DNS server for captive portal behavior
   // This redirects all DNS queries to our IP, making any domain typed resolve to us
   dnsServer = new DNSServer();
   dnsServer->setErrorReplyCode(DNSReplyCode::NoError);
   dnsServer->start(DNS_PORT, "*", apIP);
-  Serial.printf("[%lu] [WEBACT] DNS server started for captive portal\n", millis());
+  LOG_DBG("WEBACT", "DNS server started for captive portal");
 
-  Serial.printf("[%lu] [WEBACT] [MEM] Free heap after AP start: %d bytes\n", millis(), ESP.getFreeHeap());
+  LOG_DBG("WEBACT", "Free heap after AP start: %d bytes", ESP.getFreeHeap());
 
   // Start the web server
   startWebServer();
 }
 
 void CrossPointWebServerActivity::startWebServer() {
-  Serial.printf("[%lu] [WEBACT] Starting web server...\n", millis());
+  LOG_DBG("WEBACT", "Starting web server...");
 
   // Create the web server instance
   webServer.reset(new CrossPointWebServer());
@@ -249,16 +232,17 @@ void CrossPointWebServerActivity::startWebServer() {
 
   if (webServer->isRunning()) {
     state = WebServerActivityState::SERVER_RUNNING;
-    Serial.printf("[%lu] [WEBACT] Web server started successfully\n", millis());
+    LOG_DBG("WEBACT", "Web server started successfully");
 
     // Force an immediate render since we're transitioning from a subactivity
     // that had its own rendering task. We need to make sure our display is shown.
-    xSemaphoreTake(renderingMutex, portMAX_DELAY);
-    render();
-    xSemaphoreGive(renderingMutex);
-    Serial.printf("[%lu] [WEBACT] Rendered File Transfer screen\n", millis());
+    {
+      RenderLock lock(*this);
+      render(std::move(lock));
+    }
+    LOG_DBG("WEBACT", "Rendered File Transfer screen");
   } else {
-    Serial.printf("[%lu] [WEBACT] ERROR: Failed to start web server!\n", millis());
+    LOG_ERR("WEBACT", "ERROR: Failed to start web server!");
     webServer.reset();
     // Go back on error
     onGoBack();
@@ -267,9 +251,9 @@ void CrossPointWebServerActivity::startWebServer() {
 
 void CrossPointWebServerActivity::stopWebServer() {
   if (webServer && webServer->isRunning()) {
-    Serial.printf("[%lu] [WEBACT] Stopping web server...\n", millis());
+    LOG_DBG("WEBACT", "Stopping web server...");
     webServer->stop();
-    Serial.printf("[%lu] [WEBACT] Web server stopped\n", millis());
+    LOG_DBG("WEBACT", "Web server stopped");
   }
   webServer.reset();
 }
@@ -295,16 +279,16 @@ void CrossPointWebServerActivity::loop() {
         lastWifiCheck = millis();
         const wl_status_t wifiStatus = WiFi.status();
         if (wifiStatus != WL_CONNECTED) {
-          Serial.printf("[%lu] [WEBACT] WiFi disconnected! Status: %d\n", millis(), wifiStatus);
+          LOG_DBG("WEBACT", "WiFi disconnected! Status: %d", wifiStatus);
           // Show error and exit gracefully
           state = WebServerActivityState::SHUTTING_DOWN;
-          updateRequired = true;
+          requestUpdate();
           return;
         }
         // Log weak signal warnings
         const int rssi = WiFi.RSSI();
         if (rssi < -75) {
-          Serial.printf("[%lu] [WEBACT] Warning: Weak WiFi signal: %d dBm\n", millis(), rssi);
+          LOG_DBG("WEBACT", "Warning: Weak WiFi signal: %d dBm", rssi);
         }
       }
     }
@@ -315,8 +299,7 @@ void CrossPointWebServerActivity::loop() {
 
       // Log if there's a significant gap between handleClient calls (>100ms)
       if (lastHandleClientTime > 0 && timeSinceLastHandleClient > 100) {
-        Serial.printf("[%lu] [WEBACT] WARNING: %lu ms gap since last handleClient\n", millis(),
-                      timeSinceLastHandleClient);
+        LOG_DBG("WEBACT", "WARNING: %lu ms gap since last handleClient", timeSinceLastHandleClient);
       }
 
       // Reset watchdog BEFORE processing - HTTP header parsing can be slow
@@ -324,19 +307,30 @@ void CrossPointWebServerActivity::loop() {
 
       // Process HTTP requests in tight loop for maximum throughput
       // More iterations = more data processed per main loop cycle
-      constexpr int MAX_ITERATIONS = 64;
+      constexpr int MAX_ITERATIONS = 500;
       for (int i = 0; i < MAX_ITERATIONS && webServer->isRunning(); i++) {
         webServer->handleClient();
-        // Reset watchdog every 16 iterations
-        if ((i & 0x0F) == 0x0F) {
+        // Reset watchdog every 32 iterations
+        if ((i & 0x1F) == 0x1F) {
           esp_task_wdt_reset();
+        }
+        // Yield and check for exit button every 64 iterations
+        if ((i & 0x3F) == 0x3F) {
           yield();
+          // Force trigger an update of which buttons are being pressed so be have accurate state
+          // for back button checking
+          mappedInput.update();
+          // Check for exit button inside loop for responsiveness
+          if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+            onGoBack();
+            return;
+          }
         }
       }
       lastHandleClientTime = millis();
     }
 
-    // Handle exit on Back button
+    // Handle exit on Back button (also check outside loop)
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
       onGoBack();
       return;
@@ -344,115 +338,101 @@ void CrossPointWebServerActivity::loop() {
   }
 }
 
-void CrossPointWebServerActivity::displayTaskLoop() {
-  while (true) {
-    if (updateRequired) {
-      updateRequired = false;
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
-      render();
-      xSemaphoreGive(renderingMutex);
-    }
-    vTaskDelay(10 / portTICK_PERIOD_MS);
-  }
-}
-
-void CrossPointWebServerActivity::render() const {
+void CrossPointWebServerActivity::render(Activity::RenderLock&&) {
   // Only render our own UI when server is running
   // Subactivities handle their own rendering
-  if (state == WebServerActivityState::SERVER_RUNNING) {
+  if (state == WebServerActivityState::SERVER_RUNNING || state == WebServerActivityState::AP_STARTING) {
     renderer.clearScreen();
-    renderServerRunning();
-    renderer.displayBuffer();
-  } else if (state == WebServerActivityState::AP_STARTING) {
-    renderer.clearScreen();
+    const auto& metrics = UITheme::getInstance().getMetrics();
+    const auto pageWidth = renderer.getScreenWidth();
     const auto pageHeight = renderer.getScreenHeight();
-    renderer.drawCenteredText(UI_12_FONT_ID, pageHeight / 2 - 20, TR(STARTING_HOTSPOT), true, EpdFontFamily::BOLD);
-    renderer.displayBuffer();
-  }
-}
 
-void drawQRCode(const GfxRenderer& renderer, const int x, const int y, const std::string& data) {
-  // Implementation of QR code calculation
-  // The structure to manage the QR code
-  QRCode qrcode;
-  uint8_t qrcodeBytes[qrcode_getBufferSize(4)];
-  Serial.printf("[%lu] [WEBACT] QR Code (%lu): %s\n", millis(), data.length(), data.c_str());
+    GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight},
+                   isApMode ? tr(STR_HOTSPOT_MODE) : tr(STR_FILE_TRANSFER), nullptr);
 
-  qrcode_initText(&qrcode, qrcodeBytes, 4, ECC_LOW, data.c_str());
-  const uint8_t px = 6;  // pixels per module
-  for (uint8_t cy = 0; cy < qrcode.size; cy++) {
-    for (uint8_t cx = 0; cx < qrcode.size; cx++) {
-      if (qrcode_getModule(&qrcode, cx, cy)) {
-        // Serial.print("**");
-        renderer.fillRect(x + px * cx, y + px * cy, px, px, true);
-      } else {
-        // Serial.print("  ");
-      }
+    if (state == WebServerActivityState::SERVER_RUNNING) {
+      GUI.drawSubHeader(renderer, Rect{0, metrics.topPadding + metrics.headerHeight, pageWidth, metrics.tabBarHeight},
+                        connectedSSID.c_str());
+      renderServerRunning();
+    } else {
+      const auto height = renderer.getLineHeight(UI_10_FONT_ID);
+      const auto top = (pageHeight - height) / 2;
+      renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_STARTING_HOTSPOT));
     }
-    // Serial.print("\n");
+    renderer.displayBuffer();
   }
 }
 
 void CrossPointWebServerActivity::renderServerRunning() const {
-  // Use consistent line spacing
-  constexpr int LINE_SPACING = 28;  // Space between lines
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const auto pageWidth = renderer.getScreenWidth();
 
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, TR(FILE_TRANSFER), true, EpdFontFamily::BOLD);
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight},
+                 isApMode ? tr(STR_HOTSPOT_MODE) : tr(STR_FILE_TRANSFER), nullptr);
+  GUI.drawSubHeader(renderer, Rect{0, metrics.topPadding + metrics.headerHeight, pageWidth, metrics.tabBarHeight},
+                    connectedSSID.c_str());
 
+  int startY = metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing * 2;
+  int height10 = renderer.getLineHeight(UI_10_FONT_ID);
   if (isApMode) {
-    // AP mode display - center the content block
-    int startY = 55;
+    // AP mode display
+    renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, startY, tr(STR_CONNECT_WIFI_HINT), true,
+                      EpdFontFamily::BOLD);
+    startY += height10 + metrics.verticalSpacing * 2;
 
-    renderer.drawCenteredText(UI_10_FONT_ID, startY, TR(HOTSPOT_MODE), true, EpdFontFamily::BOLD);
-
-    std::string ssidInfo = std::string(TR(NETWORK_PREFIX)) + connectedSSID;
-    renderer.drawCenteredText(UI_10_FONT_ID, startY + LINE_SPACING, ssidInfo.c_str());
-
-    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 2, TR(CONNECT_WIFI_HINT));
-
-    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 3, TR(SCAN_QR_WIFI_HINT));
-    // Show QR code for URL
+    // Show QR code for Wifi
     const std::string wifiConfig = std::string("WIFI:S:") + connectedSSID + ";;";
-    drawQRCode(renderer, (480 - 6 * 33) / 2, startY + LINE_SPACING * 4, wifiConfig);
+    const Rect qrBoundsWifi(metrics.contentSidePadding, startY, QR_CODE_WIDTH, QR_CODE_HEIGHT);
+    QrUtils::drawQrCode(renderer, qrBoundsWifi, wifiConfig);
 
-    startY += 6 * 29 + 3 * LINE_SPACING;
-    // Show primary URL (IP address — mDNS is skipped in AP mode to save memory)
-    std::string ipUrl = std::string("http://") + connectedIP + "/";
-    renderer.drawCenteredText(UI_10_FONT_ID, startY + LINE_SPACING * 3, ipUrl.c_str(), true, EpdFontFamily::BOLD);
+    // Show network name
+    renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding + QR_CODE_WIDTH + metrics.verticalSpacing, startY + 80,
+                      connectedSSID.c_str());
 
-    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 4, TR(OPEN_URL_HINT));
+    startY += QR_CODE_HEIGHT + 2 * metrics.verticalSpacing;
+
+    // Show primary URL (hostname)
+    renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, startY, tr(STR_OPEN_URL_HINT), true,
+                      EpdFontFamily::BOLD);
+    startY += height10 + metrics.verticalSpacing * 2;
+
+    std::string hostnameUrl = std::string("http://") + AP_HOSTNAME + ".local/";
+    std::string ipUrl = tr(STR_OR_HTTP_PREFIX) + connectedIP + "/";
 
     // Show QR code for URL
-    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 5, TR(SCAN_QR_HINT));
-    drawQRCode(renderer, (480 - 6 * 33) / 2, startY + LINE_SPACING * 6, ipUrl);
+    const Rect qrBoundsUrl(metrics.contentSidePadding, startY, QR_CODE_WIDTH, QR_CODE_HEIGHT);
+    QrUtils::drawQrCode(renderer, qrBoundsUrl, hostnameUrl);
+
+    // Show IP address as fallback
+    renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding + QR_CODE_WIDTH + metrics.verticalSpacing, startY + 80,
+                      hostnameUrl.c_str());
+    renderer.drawText(SMALL_FONT_ID, metrics.contentSidePadding + QR_CODE_WIDTH + metrics.verticalSpacing, startY + 100,
+                      ipUrl.c_str());
   } else {
+    startY += metrics.verticalSpacing * 2;
+
     // STA mode display (original behavior)
-    const int startY = 65;
+    // std::string ipInfo = "IP Address: " + connectedIP;
+    renderer.drawCenteredText(UI_10_FONT_ID, startY, tr(STR_OPEN_URL_HINT), true, EpdFontFamily::BOLD);
+    startY += height10;
+    renderer.drawCenteredText(UI_10_FONT_ID, startY, tr(STR_SCAN_QR_HINT), true, EpdFontFamily::BOLD);
+    startY += height10 + metrics.verticalSpacing * 2;
 
-    std::string ssidInfo = std::string(TR(NETWORK_PREFIX)) + connectedSSID;
-    if (ssidInfo.length() > 28) {
-      ssidInfo.replace(25, ssidInfo.length() - 25, "...");
-    }
-    renderer.drawCenteredText(UI_10_FONT_ID, startY, ssidInfo.c_str());
-
-    std::string ipInfo = std::string(TR(IP_ADDRESS_PREFIX)) + connectedIP;
-    renderer.drawCenteredText(UI_10_FONT_ID, startY + LINE_SPACING, ipInfo.c_str());
+    // Show QR code for URL
+    std::string webInfo = "http://" + connectedIP + "/";
+    const Rect qrBounds((pageWidth - QR_CODE_WIDTH) / 2, startY, QR_CODE_WIDTH, QR_CODE_HEIGHT);
+    QrUtils::drawQrCode(renderer, qrBounds, webInfo);
+    startY += QR_CODE_HEIGHT + metrics.verticalSpacing * 2;
 
     // Show web server URL prominently
-    std::string webInfo = "http://" + connectedIP + "/";
-    renderer.drawCenteredText(UI_10_FONT_ID, startY + LINE_SPACING * 2, webInfo.c_str(), true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_10_FONT_ID, startY, webInfo.c_str(), true);
+    startY += height10 + 5;
 
     // Also show hostname URL
-    std::string hostnameUrl = std::string(TR(OR_HTTP_PREFIX)) + AP_HOSTNAME + ".local/";
-    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 3, hostnameUrl.c_str());
-
-    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 4, TR(OPEN_URL_HINT));
-
-    // Show QR code for URL
-    drawQRCode(renderer, (480 - 6 * 33) / 2, startY + LINE_SPACING * 6, webInfo);
-    renderer.drawCenteredText(SMALL_FONT_ID, startY + LINE_SPACING * 5, TR(SCAN_QR_HINT));
+    std::string hostnameUrl = std::string(tr(STR_OR_HTTP_PREFIX)) + AP_HOSTNAME + ".local/";
+    renderer.drawCenteredText(SMALL_FONT_ID, startY, hostnameUrl.c_str(), true);
   }
 
-  const auto labels = mappedInput.mapLabels(TR(EXIT), "", "", "");
+  const auto labels = mappedInput.mapLabels(tr(STR_EXIT), "", "", "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }

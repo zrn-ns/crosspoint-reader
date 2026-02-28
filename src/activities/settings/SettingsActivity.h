@@ -1,7 +1,5 @@
 #pragma once
-#include <freertos/FreeRTOS.h>
-#include <freertos/semphr.h>
-#include <freertos/task.h>
+#include <I18n.h>
 
 #include <functional>
 #include <string>
@@ -14,11 +12,24 @@ class CrossPointSettings;
 
 enum class SettingType { TOGGLE, ENUM, ACTION, VALUE, STRING };
 
+enum class SettingAction {
+  None,
+  RemapFrontButtons,
+  CustomiseStatusBar,
+  KOReaderSync,
+  OPDSBrowser,
+  Network,
+  ClearCache,
+  CheckForUpdates,
+  Language,
+};
+
 struct SettingInfo {
-  const char* name;
+  StrId nameId;
   SettingType type;
   uint8_t CrossPointSettings::* valuePtr = nullptr;
-  std::vector<std::string> enumValues;
+  std::vector<StrId> enumValues;
+  SettingAction action = SettingAction::None;
 
   struct ValueRange {
     uint8_t min;
@@ -27,8 +38,8 @@ struct SettingInfo {
   };
   ValueRange valueRange = {};
 
-  const char* key = nullptr;       // JSON API key (nullptr for ACTION types)
-  const char* category = nullptr;  // Category for web UI grouping
+  const char* key = nullptr;             // JSON API key (nullptr for ACTION types)
+  StrId category = StrId::STR_NONE_OPT;  // Category for web UI grouping
 
   // Direct char[] string fields (for settings stored in CrossPointSettings)
   char* stringPtr = nullptr;
@@ -40,10 +51,10 @@ struct SettingInfo {
   std::function<std::string()> stringGetter;
   std::function<void(const std::string&)> stringSetter;
 
-  static SettingInfo Toggle(const char* name, uint8_t CrossPointSettings::* ptr, const char* key = nullptr,
-                            const char* category = nullptr) {
+  static SettingInfo Toggle(StrId nameId, uint8_t CrossPointSettings::* ptr, const char* key = nullptr,
+                            StrId category = StrId::STR_NONE_OPT) {
     SettingInfo s;
-    s.name = name;
+    s.nameId = nameId;
     s.type = SettingType::TOGGLE;
     s.valuePtr = ptr;
     s.key = key;
@@ -51,10 +62,10 @@ struct SettingInfo {
     return s;
   }
 
-  static SettingInfo Enum(const char* name, uint8_t CrossPointSettings::* ptr, std::vector<std::string> values,
-                          const char* key = nullptr, const char* category = nullptr) {
+  static SettingInfo Enum(StrId nameId, uint8_t CrossPointSettings::* ptr, std::vector<StrId> values,
+                          const char* key = nullptr, StrId category = StrId::STR_NONE_OPT) {
     SettingInfo s;
-    s.name = name;
+    s.nameId = nameId;
     s.type = SettingType::ENUM;
     s.valuePtr = ptr;
     s.enumValues = std::move(values);
@@ -63,17 +74,18 @@ struct SettingInfo {
     return s;
   }
 
-  static SettingInfo Action(const char* name) {
+  static SettingInfo Action(StrId nameId, SettingAction action) {
     SettingInfo s;
-    s.name = name;
+    s.nameId = nameId;
     s.type = SettingType::ACTION;
+    s.action = action;
     return s;
   }
 
-  static SettingInfo Value(const char* name, uint8_t CrossPointSettings::* ptr, const ValueRange valueRange,
-                           const char* key = nullptr, const char* category = nullptr) {
+  static SettingInfo Value(StrId nameId, uint8_t CrossPointSettings::* ptr, const ValueRange valueRange,
+                           const char* key = nullptr, StrId category = StrId::STR_NONE_OPT) {
     SettingInfo s;
-    s.name = name;
+    s.nameId = nameId;
     s.type = SettingType::VALUE;
     s.valuePtr = ptr;
     s.valueRange = valueRange;
@@ -82,10 +94,10 @@ struct SettingInfo {
     return s;
   }
 
-  static SettingInfo String(const char* name, char* ptr, size_t maxLen, const char* key = nullptr,
-                            const char* category = nullptr) {
+  static SettingInfo String(StrId nameId, char* ptr, size_t maxLen, const char* key = nullptr,
+                            StrId category = StrId::STR_NONE_OPT) {
     SettingInfo s;
-    s.name = name;
+    s.nameId = nameId;
     s.type = SettingType::STRING;
     s.stringPtr = ptr;
     s.stringMaxLen = maxLen;
@@ -94,11 +106,11 @@ struct SettingInfo {
     return s;
   }
 
-  static SettingInfo DynamicEnum(const char* name, std::vector<std::string> values, std::function<uint8_t()> getter,
+  static SettingInfo DynamicEnum(StrId nameId, std::vector<StrId> values, std::function<uint8_t()> getter,
                                  std::function<void(uint8_t)> setter, const char* key = nullptr,
-                                 const char* category = nullptr) {
+                                 StrId category = StrId::STR_NONE_OPT) {
     SettingInfo s;
-    s.name = name;
+    s.nameId = nameId;
     s.type = SettingType::ENUM;
     s.enumValues = std::move(values);
     s.valueGetter = std::move(getter);
@@ -108,11 +120,11 @@ struct SettingInfo {
     return s;
   }
 
-  static SettingInfo DynamicString(const char* name, std::function<std::string()> getter,
+  static SettingInfo DynamicString(StrId nameId, std::function<std::string()> getter,
                                    std::function<void(const std::string&)> setter, const char* key = nullptr,
-                                   const char* category = nullptr) {
+                                   StrId category = StrId::STR_NONE_OPT) {
     SettingInfo s;
-    s.name = name;
+    s.nameId = nameId;
     s.type = SettingType::STRING;
     s.stringGetter = std::move(getter);
     s.stringSetter = std::move(setter);
@@ -123,10 +135,8 @@ struct SettingInfo {
 };
 
 class SettingsActivity final : public ActivityWithSubactivity {
-  TaskHandle_t displayTaskHandle = nullptr;
-  SemaphoreHandle_t renderingMutex = nullptr;
   ButtonNavigator buttonNavigator;
-  bool updateRequired = false;
+
   int selectedCategoryIndex = 0;  // Currently selected category
   int selectedSettingIndex = 0;
   int settingsCount = 0;
@@ -141,11 +151,8 @@ class SettingsActivity final : public ActivityWithSubactivity {
   const std::function<void()> onGoHome;
 
   static constexpr int categoryCount = 4;
-  static const char* categoryNames[categoryCount];
+  static const StrId categoryNames[categoryCount];
 
-  static void taskTrampoline(void* param);
-  [[noreturn]] void displayTaskLoop();
-  void render() const;
   void enterCategory(int categoryIndex);
   void toggleCurrentSetting();
 
@@ -156,4 +163,5 @@ class SettingsActivity final : public ActivityWithSubactivity {
   void onEnter() override;
   void onExit() override;
   void loop() override;
+  void render(Activity::RenderLock&&) override;
 };

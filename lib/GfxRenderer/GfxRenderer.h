@@ -1,9 +1,12 @@
 #pragma once
 
 #include <EpdFontFamily.h>
+#include <FontDecompressor.h>
 #include <HalDisplay.h>
 
 #include <map>
+#include <string>
+#include <vector>
 
 #include "Bitmap.h"
 
@@ -41,6 +44,7 @@ class GfxRenderer {
   uint8_t* frameBuffer = nullptr;
   uint8_t* bwBufferChunks[BW_BUFFER_NUM_CHUNKS] = {nullptr};
   std::map<int, EpdFontFamily> fontMap;
+  FontDecompressor* fontDecompressor = nullptr;
   // Dark mode: true = black background, false = white background
   bool darkMode = false;
   // Extra spacing (in pixels) for ASCII letters/digits when using external reader font.
@@ -85,6 +89,10 @@ class GfxRenderer {
   // Setup
   void begin();  // must be called right after display.begin()
   void insertFont(int fontId, EpdFontFamily font);
+  void setFontDecompressor(FontDecompressor* d) { fontDecompressor = d; }
+  void clearFontCache() {
+    if (fontDecompressor) fontDecompressor->clearCache();
+  }
 
   // Orientation control (affects logical width/height and coordinate
   // transforms)
@@ -144,12 +152,22 @@ class GfxRenderer {
                         EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
   void drawText(int fontId, int x, int y, const char* text, bool black = true,
                 EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
-  int getSpaceWidth(int fontId) const;
-  int getTextAdvanceX(int fontId, const char* text) const;
+  int getSpaceWidth(int fontId, EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
+  /// Returns the kerning adjustment for a space between two codepoints:
+  /// kern(leftCp, ' ') + kern(' ', rightCp). Returns 0 if kerning is unavailable.
+  int getSpaceKernAdjust(int fontId, uint32_t leftCp, uint32_t rightCp, EpdFontFamily::Style style) const;
+  /// Returns the kerning adjustment between two adjacent codepoints.
+  int getKerning(int fontId, uint32_t leftCp, uint32_t rightCp, EpdFontFamily::Style style) const;
+  int getTextAdvanceX(int fontId, const char* text, EpdFontFamily::Style style) const;
   int getFontAscenderSize(int fontId) const;
   int getLineHeight(int fontId) const;
   std::string truncatedText(int fontId, const char* text, int maxWidth,
                             EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
+  /// Word-wrap \p text into at most \p maxLines lines, each no wider than
+  /// \p maxWidth pixels. Overflowing words and excess lines are UTF-8-safely
+  /// truncated with an ellipsis (U+2026).
+  std::vector<std::string> wrappedText(int fontId, const char* text, int maxWidth, int maxLines,
+                                       EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
 
   // UI Components
   void drawButtonHints(int fontId, const char* btn1, const char* btn2, const char* btn3, const char* btn4);
@@ -162,12 +180,16 @@ class GfxRenderer {
 
   // Grayscale functions
   void setRenderMode(const RenderMode mode) { this->renderMode = mode; }
+  RenderMode getRenderMode() const { return renderMode; }
   void copyGrayscaleLsbBuffers() const;
   void copyGrayscaleMsbBuffers() const;
   void displayGrayBuffer(bool turnOffScreen = false, bool darkMode = false) const;
   bool storeBwBuffer();    // Returns true if buffer was stored successfully
   void restoreBwBuffer();  // Restore and free the stored buffer
   void cleanupGrayscaleWithFrameBuffer() const;
+
+  // Font helpers
+  const uint8_t* getGlyphBitmap(const EpdFontData* fontData, const EpdGlyph* glyph) const;
 
   // Low level functions
   uint8_t* getFrameBuffer() const;

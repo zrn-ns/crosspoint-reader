@@ -3,7 +3,6 @@
 #include <HalStorage.h>
 
 #include <cstddef>
-#include <list>
 #include <memory>
 #include <string>
 #include <vector>
@@ -14,14 +13,14 @@
 // Represents a line of text on a page
 class TextBlock final : public Block {
  private:
-  std::list<std::string> words;
-  std::list<uint16_t> wordXpos;
-  std::list<EpdFontFamily::Style> wordStyles;
+  std::vector<std::string> words;
+  std::vector<uint16_t> wordXpos;
+  std::vector<EpdFontFamily::Style> wordStyles;
   BlockStyle blockStyle;
 
  public:
-  explicit TextBlock(std::list<std::string> words, std::list<uint16_t> word_xpos,
-                     std::list<EpdFontFamily::Style> word_styles, const BlockStyle& blockStyle = BlockStyle())
+  explicit TextBlock(std::vector<std::string> words, std::vector<uint16_t> word_xpos,
+                     std::vector<EpdFontFamily::Style> word_styles, const BlockStyle& blockStyle = BlockStyle())
       : words(std::move(words)),
         wordXpos(std::move(word_xpos)),
         wordStyles(std::move(word_styles)),
@@ -29,8 +28,8 @@ class TextBlock final : public Block {
   ~TextBlock() override = default;
   void setBlockStyle(const BlockStyle& blockStyle) { this->blockStyle = blockStyle; }
   const BlockStyle& getBlockStyle() const { return blockStyle; }
+  const std::vector<std::string>& getWords() const { return words; }
   bool isEmpty() override { return words.empty(); }
-  void layout(GfxRenderer& renderer) override {};
   // given a renderer works out where to break the words into lines
   void render(const GfxRenderer& renderer, int fontId, int x, int y) const;
   void collectCodepoints(std::vector<uint32_t>& out, size_t max) const;

@@ -3,6 +3,7 @@
 #include <EInkDisplay.h>
 #include <EpdFontFamily.h>
 #include <FontManager.h>
+#include <Logging.h>
 #include <Utf8.h>
 
 #include <algorithm>
@@ -59,13 +60,12 @@ bool isCjkCodepoint(const uint32_t cp) {
   // Fullwidth forms: U+FF00 - U+FFEF
   if (cp >= 0xFF00 && cp <= 0xFFEF) return true;
   // General Punctuation: U+2000 - U+206F (includes smart quotes, ellipsis,
-  // dashes) Common Chinese punctuation: \u201c \u201d \u2018 \u2019 \u2026 \u2014 \u2013
+  // dashes)
   if (cp >= 0x2000 && cp <= 0x206F) return true;
-  // Number Forms: U+2150 - U+218F (includes Roman numerals \u2160 \u2161 \u2162 etc.)
+  // Number Forms: U+2150 - U+218F (includes Roman numerals)
   if (cp >= 0x2150 && cp <= 0x218F) return true;
-  // Enclosed Alphanumerics: U+2460 - U+24FF (includes \u2460 \u2461 \u2462 etc.)
+  // Enclosed Alphanumerics: U+2460 - U+24FF
   if (cp >= 0x2460 && cp <= 0x24FF) return true;
-  // CJK Symbols and Punctuation: U+3000 - U+303F (already covered above)
   // Enclosed CJK Letters and Months: U+3200 - U+32FF
   if (cp >= 0x3200 && cp <= 0x32FF) return true;
   // CJK Compatibility: U+3300 - U+33FF
@@ -106,10 +106,22 @@ bool isUiFont(int fontId) {
 }
 }  // namespace
 
+const uint8_t* GfxRenderer::getGlyphBitmap(const EpdFontData* fontData, const EpdGlyph* glyph) const {
+  if (fontData->groups != nullptr) {
+    if (!fontDecompressor) {
+      LOG_ERR("GFX", "Compressed font but no FontDecompressor set");
+      return nullptr;
+    }
+    uint16_t glyphIndex = static_cast<uint16_t>(glyph - fontData->glyph);
+    return fontDecompressor->getBitmap(fontData, glyph, glyphIndex);
+  }
+  return &fontData->bitmap[glyph->dataOffset];
+}
+
 void GfxRenderer::begin() {
   frameBuffer = display.getFrameBuffer();
   if (!frameBuffer) {
-    Serial.printf("[%lu] [GFX] !! No framebuffer\n", millis());
+    LOG_ERR("GFX", "!! No framebuffer");
     assert(false);
   }
 }
@@ -122,7 +134,7 @@ static inline void rotateCoordinates(const GfxRenderer::Orientation orientation,
                                      int* phyY) {
   switch (orientation) {
     case GfxRenderer::Portrait: {
-      // Logical portrait (480x800) -> panel (800x480)
+      // Logical portrait (480x800) → panel (800x480)
       // Rotation: 90 degrees clockwise
       *phyX = y;
       *phyY = HalDisplay::DISPLAY_HEIGHT - 1 - x;
@@ -135,7 +147,7 @@ static inline void rotateCoordinates(const GfxRenderer::Orientation orientation,
       break;
     }
     case GfxRenderer::PortraitInverted: {
-      // Logical portrait (480x800) -> panel (800x480)
+      // Logical portrait (480x800) → panel (800x480)
       // Rotation: 90 degrees counter-clockwise
       *phyX = HalDisplay::DISPLAY_WIDTH - 1 - y;
       *phyY = x;
@@ -147,6 +159,107 @@ static inline void rotateCoordinates(const GfxRenderer::Orientation orientation,
       *phyY = y;
       break;
     }
+  }
+}
+
+enum class TextRotation { None, Rotated90CW };
+
+// Shared glyph rendering logic for normal and rotated text.
+// Coordinate mapping and cursor advance direction are selected at compile time via the template parameter.
+template <TextRotation rotation>
+static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode renderMode,
+                           const EpdFontFamily& fontFamily, const uint32_t cp, int* cursorX, int* cursorY,
+                           const bool pixelState, const EpdFontFamily::Style style) {
+  const EpdGlyph* glyph = fontFamily.getGlyph(cp, style);
+  if (!glyph) {
+    LOG_ERR("GFX", "No glyph for codepoint %d", cp);
+    return;
+  }
+
+  const EpdFontData* fontData = fontFamily.getData(style);
+  const bool is2Bit = fontData->is2Bit;
+  const uint8_t width = glyph->width;
+  const uint8_t height = glyph->height;
+  const int left = glyph->left;
+  const int top = glyph->top;
+
+  const uint8_t* bitmap = renderer.getGlyphBitmap(fontData, glyph);
+
+  if (bitmap != nullptr) {
+    // For Normal:  outer loop advances screenY, inner loop advances screenX
+    // For Rotated: outer loop advances screenX, inner loop advances screenY (in reverse)
+    int outerBase, innerBase;
+    if constexpr (rotation == TextRotation::Rotated90CW) {
+      outerBase = *cursorX + fontData->ascender - top;  // screenX = outerBase + glyphY
+      innerBase = *cursorY - left;                      // screenY = innerBase - glyphX
+    } else {
+      outerBase = *cursorY - top;   // screenY = outerBase + glyphY
+      innerBase = *cursorX + left;  // screenX = innerBase + glyphX
+    }
+
+    if (is2Bit) {
+      int pixelPosition = 0;
+      for (int glyphY = 0; glyphY < height; glyphY++) {
+        const int outerCoord = outerBase + glyphY;
+        for (int glyphX = 0; glyphX < width; glyphX++, pixelPosition++) {
+          int screenX, screenY;
+          if constexpr (rotation == TextRotation::Rotated90CW) {
+            screenX = outerCoord;
+            screenY = innerBase - glyphX;
+          } else {
+            screenX = innerBase + glyphX;
+            screenY = outerCoord;
+          }
+
+          const uint8_t byte = bitmap[pixelPosition >> 2];
+          const uint8_t bit_index = (3 - (pixelPosition & 3)) * 2;
+          // the direct bit from the font is 0 -> white, 1 -> light gray, 2 -> dark gray, 3 -> black
+          // we swap this to better match the way images and screen think about colors:
+          // 0 -> black, 1 -> dark grey, 2 -> light grey, 3 -> white
+          const uint8_t bmpVal = 3 - ((byte >> bit_index) & 0x3);
+
+          if (renderMode == GfxRenderer::BW && bmpVal < 3) {
+            // Black (also paints over the grays in BW mode)
+            renderer.drawPixel(screenX, screenY, pixelState);
+          } else if (renderMode == GfxRenderer::GRAYSCALE_MSB && (bmpVal == 1 || bmpVal == 2)) {
+            // Light gray (also mark the MSB if it's going to be a dark gray too)
+            // We have to flag pixels in reverse for the gray buffers, as 0 leave alone, 1 update
+            renderer.drawPixel(screenX, screenY, false);
+          } else if (renderMode == GfxRenderer::GRAYSCALE_LSB && bmpVal == 1) {
+            // Dark gray
+            renderer.drawPixel(screenX, screenY, false);
+          }
+        }
+      }
+    } else {
+      int pixelPosition = 0;
+      for (int glyphY = 0; glyphY < height; glyphY++) {
+        const int outerCoord = outerBase + glyphY;
+        for (int glyphX = 0; glyphX < width; glyphX++, pixelPosition++) {
+          int screenX, screenY;
+          if constexpr (rotation == TextRotation::Rotated90CW) {
+            screenX = outerCoord;
+            screenY = innerBase - glyphX;
+          } else {
+            screenX = innerBase + glyphX;
+            screenY = outerCoord;
+          }
+
+          const uint8_t byte = bitmap[pixelPosition >> 3];
+          const uint8_t bit_index = 7 - (pixelPosition & 7);
+
+          if ((byte >> bit_index) & 1) {
+            renderer.drawPixel(screenX, screenY, pixelState);
+          }
+        }
+      }
+    }
+  }
+
+  if constexpr (rotation == TextRotation::Rotated90CW) {
+    *cursorY -= glyph->advanceX;
+  } else {
+    *cursorX += glyph->advanceX;
   }
 }
 
@@ -165,10 +278,10 @@ void GfxRenderer::drawPixel(const int x, const int y, const bool state) const {
     // session)
     static int outsideRangeCount = 0;
     if (outsideRangeCount < 5) {
-      Serial.printf("[%lu] [GFX] !! Outside range (%d, %d) -> (%d, %d)\n", millis(), x, y, phyX, phyY);
+      LOG_ERR("GFX", "!! Outside range (%d, %d) -> (%d, %d)", x, y, phyX, phyY);
       outsideRangeCount++;
       if (outsideRangeCount == 5) {
-        Serial.printf("[GFX] !! Suppressing further outside range warnings\n");
+        LOG_ERR("GFX", "!! Suppressing further outside range warnings");
       }
     }
     return;
@@ -240,7 +353,7 @@ int GfxRenderer::getTextWidth(const int fontId, const char* text, const EpdFontF
       }
       return width;
     }
-    Serial.printf("[%lu] [GFX] Font %d not found\n", millis(), effectiveFontId);
+    LOG_ERR("GFX", "Font %d not found", effectiveFontId);
     return 0;
   }
 
@@ -257,7 +370,7 @@ int GfxRenderer::getTextWidth(const int fontId, const char* text, const EpdFontF
         const int cjkAdvance = clampExternalAdvance(extFont->getCharWidth(), cjkSpacing);
         uint32_t cp;
         while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&ptr)))) {
-          // Fast path: CJK characters always use charWidth — skip SD card read entirely
+          // Fast path: CJK characters always use charWidth - skip SD card read entirely
           if (isCjkCodepoint(cp)) {
             width += cjkAdvance;
             continue;
@@ -309,7 +422,7 @@ int GfxRenderer::getTextWidth(const int fontId, const char* text, const EpdFontF
       int width = 0;
       const char* ptr = text;
       const EpdFontFamily& fontFamily = fontMap.at(fontId);
-      FontManager& fm = FontManager::getInstance();
+      FontManager& fmLocal = FontManager::getInstance();
       uint32_t cp;
       while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&ptr)))) {
         // Check if character is in our UI font (includes CJK and English)
@@ -321,10 +434,10 @@ int GfxRenderer::getTextWidth(const int fontId, const char* text, const EpdFontF
         } else if (isCjkCodepoint(cp)) {
           // CJK character not in UI font: try UI external font, then reader
           ExternalFont* uiExtFont = nullptr;
-          if (fm.isUiFontEnabled()) {
-            uiExtFont = fm.getActiveUiFont();
-          } else if (fm.isExternalFontEnabled()) {
-            uiExtFont = fm.getActiveFont();
+          if (fmLocal.isUiFontEnabled()) {
+            uiExtFont = fmLocal.getActiveUiFont();
+          } else if (fmLocal.isExternalFontEnabled()) {
+            uiExtFont = fmLocal.getActiveFont();
           }
 
           if (uiExtFont) {
@@ -355,7 +468,7 @@ int GfxRenderer::getTextWidth(const int fontId, const char* text, const EpdFontF
   }
 
   int w = 0, h = 0;
-  fontMap.at(fontId).getTextDimensions(text, &w, &h, style);
+  fontMap.at(effectiveFontId).getTextDimensions(text, &w, &h, style);
   return w;
 }
 
@@ -462,7 +575,7 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
       }
       return;
     }
-    Serial.printf("[%lu] [GFX] Font %d not found\n", millis(), effectiveFontId);
+    LOG_ERR("GFX", "Font %d not found", effectiveFontId);
     return;
   }
   const auto font = fontMap.at(effectiveFontId);
@@ -504,8 +617,28 @@ void GfxRenderer::drawLine(int x1, int y1, int x2, int y2, const bool state) con
       drawPixel(x, y1, state);
     }
   } else {
-    // TODO: Implement
-    Serial.printf("[%lu] [GFX] Line drawing not supported\n", millis());
+    // Bresenham's line algorithm — integer arithmetic only
+    int dx = x2 - x1;
+    int dy = y2 - y1;
+    int sx = (dx > 0) ? 1 : -1;
+    int sy = (dy > 0) ? 1 : -1;
+    dx = sx * dx;  // abs
+    dy = sy * dy;  // abs
+
+    int err = dx - dy;
+    while (true) {
+      drawPixel(x1, y1, state);
+      if (x1 == x2 && y1 == y2) break;
+      int e2 = 2 * err;
+      if (e2 > -dy) {
+        err -= dy;
+        x1 += sx;
+      }
+      if (e2 < dx) {
+        err += dx;
+        y1 += sy;
+      }
+    }
   }
 }
 
@@ -691,7 +824,9 @@ void GfxRenderer::fillRoundedRect(const int x, const int y, const int width, con
     return;
   }
 
-  const int maxRadius = std::min({cornerRadius, width / 2, height / 2});
+  // Assume if we're not rounding all corners then we are only rounding one side
+  const int roundedSides = (!roundTopLeft || !roundTopRight || !roundBottomLeft || !roundBottomRight) ? 1 : 2;
+  const int maxRadius = std::min({cornerRadius, width / roundedSides, height / roundedSides});
   if (maxRadius <= 0) {
     fillRectDither(x, y, width, height, color);
     return;
@@ -702,10 +837,16 @@ void GfxRenderer::fillRoundedRect(const int x, const int y, const int width, con
     fillRectDither(x + maxRadius + 1, y, horizontalWidth - 2, height, color);
   }
 
-  const int verticalHeight = height - 2 * maxRadius - 2;
-  if (verticalHeight > 0) {
-    fillRectDither(x, y + maxRadius + 1, maxRadius + 1, verticalHeight, color);
-    fillRectDither(x + width - maxRadius - 1, y + maxRadius + 1, maxRadius + 1, verticalHeight, color);
+  const int leftFillTop = y + (roundTopLeft ? (maxRadius + 1) : 0);
+  const int leftFillBottom = y + height - 1 - (roundBottomLeft ? (maxRadius + 1) : 0);
+  if (leftFillBottom >= leftFillTop) {
+    fillRectDither(x, leftFillTop, maxRadius + 1, leftFillBottom - leftFillTop + 1, color);
+  }
+
+  const int rightFillTop = y + (roundTopRight ? (maxRadius + 1) : 0);
+  const int rightFillBottom = y + height - 1 - (roundBottomRight ? (maxRadius + 1) : 0);
+  if (rightFillBottom >= rightFillTop) {
+    fillRectDither(x + width - maxRadius - 1, rightFillTop, maxRadius + 1, rightFillBottom - rightFillTop + 1, color);
   }
 
   auto fillArcTemplated = [this](int maxRadius, int cx, int cy, int xDir, int yDir, Color color) {
@@ -729,26 +870,18 @@ void GfxRenderer::fillRoundedRect(const int x, const int y, const int width, con
 
   if (roundTopLeft) {
     fillArcTemplated(maxRadius, x + maxRadius, y + maxRadius, -1, -1, color);
-  } else {
-    fillRectDither(x, y, maxRadius + 1, maxRadius + 1, color);
   }
 
   if (roundTopRight) {
     fillArcTemplated(maxRadius, x + width - maxRadius - 1, y + maxRadius, 1, -1, color);
-  } else {
-    fillRectDither(x + width - maxRadius - 1, y, maxRadius + 1, maxRadius + 1, color);
   }
 
   if (roundBottomRight) {
     fillArcTemplated(maxRadius, x + width - maxRadius - 1, y + height - maxRadius - 1, 1, 1, color);
-  } else {
-    fillRectDither(x + width - maxRadius - 1, y + height - maxRadius - 1, maxRadius + 1, maxRadius + 1, color);
   }
 
   if (roundBottomLeft) {
     fillArcTemplated(maxRadius, x + maxRadius, y + height - maxRadius - 1, -1, 1, color);
-  } else {
-    fillRectDither(x, y + height - maxRadius - 1, maxRadius + 1, maxRadius + 1, color);
   }
 }
 
@@ -776,28 +909,28 @@ void GfxRenderer::drawImage(const uint8_t bitmap[], const int x, const int y, co
 }
 
 void GfxRenderer::drawIcon(const uint8_t bitmap[], const int x, const int y, const int width, const int height) const {
-  display.drawImage(bitmap, y, getScreenWidth() - width - x, height, width);
+  display.drawImageTransparent(bitmap, y, getScreenWidth() - width - x, height, width);
 }
 
 void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, const int maxWidth, const int maxHeight,
                              const float cropX, const float cropY) const {
-  // For 1-bit bitmaps, use optimized 1-bit rendering path (no crop support for
-  // 1-bit)
-  if (bitmap.is1Bit() && cropX == 0.0f && cropY == 0.0f) {
-    drawBitmap1Bit(bitmap, x, y, maxWidth, maxHeight);
-    return;
-  }
-
   // Cover art and images should keep their original colors in dark mode
   skipDarkModeForImages = true;
   auto cleanup = [this]() { skipDarkModeForImages = false; };
+
+  // For 1-bit bitmaps, use optimized 1-bit rendering path (no crop support for 1-bit)
+  if (bitmap.is1Bit() && cropX == 0.0f && cropY == 0.0f) {
+    drawBitmap1Bit(bitmap, x, y, maxWidth, maxHeight);
+    cleanup();
+    return;
+  }
 
   float scale = 1.0f;
   bool isScaled = false;
   int cropPixX = std::floor(bitmap.getWidth() * cropX / 2.0f);
   int cropPixY = std::floor(bitmap.getHeight() * cropY / 2.0f);
-  Serial.printf("[%lu] [GFX] Cropping %dx%d by %dx%d pix, is %s\n", millis(), bitmap.getWidth(), bitmap.getHeight(),
-                cropPixX, cropPixY, bitmap.isTopDown() ? "top-down" : "bottom-up");
+  LOG_DBG("GFX", "Cropping %dx%d by %dx%d pix, is %s", bitmap.getWidth(), bitmap.getHeight(), cropPixX, cropPixY,
+          bitmap.isTopDown() ? "top-down" : "bottom-up");
 
   if (maxWidth > 0 && (1.0f - cropX) * bitmap.getWidth() > maxWidth) {
     scale = static_cast<float>(maxWidth) / static_cast<float>((1.0f - cropX) * bitmap.getWidth());
@@ -807,7 +940,7 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
     scale = std::min(scale, static_cast<float>(maxHeight) / static_cast<float>((1.0f - cropY) * bitmap.getHeight()));
     isScaled = true;
   }
-  Serial.printf("[%lu] [GFX] Scaling by %f - %s\n", millis(), scale, isScaled ? "scaled" : "not scaled");
+  LOG_DBG("GFX", "Scaling by %f - %s", scale, isScaled ? "scaled" : "not scaled");
 
   if (darkMode && renderMode == BW) {
     const int sourceWidth = static_cast<int>((1.0f - cropX) * bitmap.getWidth() - cropPixX);
@@ -818,22 +951,21 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
   }
 
   // Calculate output row size (2 bits per pixel, packed into bytes)
-  // IMPORTANT: Use int, not uint8_t, to avoid overflow for images > 1020 pixels
-  // wide
+  // IMPORTANT: Use int, not uint8_t, to avoid overflow for images > 1020 pixels wide
   const int outputRowSize = (bitmap.getWidth() + 3) / 4;
   auto* outputRow = static_cast<uint8_t*>(malloc(outputRowSize));
   auto* rowBytes = static_cast<uint8_t*>(malloc(bitmap.getRowBytes()));
 
   if (!outputRow || !rowBytes) {
-    Serial.printf("[%lu] [GFX] !! Failed to allocate BMP row buffers\n", millis());
+    LOG_ERR("GFX", "!! Failed to allocate BMP row buffers");
     free(outputRow);
     free(rowBytes);
     return;
   }
 
   for (int bmpY = 0; bmpY < (bitmap.getHeight() - cropPixY); bmpY++) {
-    // The BMP's (0, 0) is the bottom-left corner (if the height is positive,
-    // top-left if negative). Screen's (0, 0) is the top-left corner.
+    // The BMP's (0, 0) is the bottom-left corner (if the height is positive, top-left if negative).
+    // Screen's (0, 0) is the top-left corner.
     int screenY = -cropPixY + (bitmap.isTopDown() ? bmpY : bitmap.getHeight() - 1 - bmpY);
     if (isScaled) {
       screenY = std::floor(screenY * scale);
@@ -842,15 +974,16 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
     if (screenY >= getScreenHeight()) {
       break;
     }
-    if (screenY < 0) {
-      continue;
-    }
 
     if (bitmap.readNextRow(outputRow, rowBytes) != BmpReaderError::Ok) {
-      Serial.printf("[%lu] [GFX] Failed to read row %d from bitmap\n", millis(), bmpY);
+      LOG_ERR("GFX", "Failed to read row %d from bitmap", bmpY);
       free(outputRow);
       free(rowBytes);
       return;
+    }
+
+    if (screenY < 0) {
+      continue;
     }
 
     if (bmpY < cropPixY) {
@@ -905,22 +1038,13 @@ void GfxRenderer::drawBitmap1Bit(const Bitmap& bitmap, const int x, const int y,
     isScaled = true;
   }
 
-  if (darkMode && renderMode == BW) {
-    const int sourceWidth = bitmap.getWidth();
-    const int sourceHeight = bitmap.getHeight();
-    const int scaledWidth = isScaled ? static_cast<int>(std::floor(sourceWidth * scale)) : sourceWidth;
-    const int scaledHeight = isScaled ? static_cast<int>(std::floor(sourceHeight * scale)) : sourceHeight;
-    fillRect(x, y, scaledWidth, scaledHeight, false);
-  }
-
-  // For 1-bit BMP, output is still 2-bit packed (for consistency with
-  // readNextRow)
+  // For 1-bit BMP, output is still 2-bit packed (for consistency with readNextRow)
   const int outputRowSize = (bitmap.getWidth() + 3) / 4;
   auto* outputRow = static_cast<uint8_t*>(malloc(outputRowSize));
   auto* rowBytes = static_cast<uint8_t*>(malloc(bitmap.getRowBytes()));
 
   if (!outputRow || !rowBytes) {
-    Serial.printf("[%lu] [GFX] !! Failed to allocate 1-bit BMP row buffers\n", millis());
+    LOG_ERR("GFX", "!! Failed to allocate 1-bit BMP row buffers");
     free(outputRow);
     free(rowBytes);
     return;
@@ -929,7 +1053,7 @@ void GfxRenderer::drawBitmap1Bit(const Bitmap& bitmap, const int x, const int y,
   for (int bmpY = 0; bmpY < bitmap.getHeight(); bmpY++) {
     // Read rows sequentially using readNextRow
     if (bitmap.readNextRow(outputRow, rowBytes) != BmpReaderError::Ok) {
-      Serial.printf("[%lu] [GFX] Failed to read row %d from 1-bit bitmap\n", millis(), bmpY);
+      LOG_ERR("GFX", "Failed to read row %d from 1-bit bitmap", bmpY);
       free(outputRow);
       free(rowBytes);
       return;
@@ -988,7 +1112,7 @@ void GfxRenderer::fillPolygon(const int* xPoints, const int* yPoints, int numPoi
   // Allocate node buffer for scanline algorithm
   auto* nodeX = static_cast<int*>(malloc(numPoints * sizeof(int)));
   if (!nodeX) {
-    Serial.printf("[%lu] [GFX] !! Failed to allocate polygon node buffer\n", millis());
+    LOG_ERR("GFX", "!! Failed to allocate polygon node buffer");
     return;
   }
 
@@ -1044,11 +1168,7 @@ static unsigned long start_ms = 0;
 
 void GfxRenderer::clearScreen(const uint8_t color) const {
   start_ms = millis();
-  // In dark mode, the default background should be black (0x00)
-  // We use bitwise NOT to invert the color parameter for dark mode
-  // This means clearScreen(0xFF) becomes clearScreen(0x00) in dark mode
-  const uint8_t actualColor = darkMode ? ~color : color;
-  display.clearScreen(actualColor);
+  display.clearScreen(color);
 }
 
 void GfxRenderer::invertScreen() const {
@@ -1059,7 +1179,7 @@ void GfxRenderer::invertScreen() const {
 
 void GfxRenderer::displayBuffer(const HalDisplay::RefreshMode refreshMode) const {
   auto elapsed = millis() - start_ms;
-  Serial.printf("[%lu] [GFX] Time = %lu ms from clearScreen to displayBuffer\n", millis(), elapsed);
+  LOG_DBG("GFX", "Time = %lu ms from clearScreen to displayBuffer", elapsed);
   display.displayBuffer(refreshMode, fadingFix);
 }
 
@@ -1068,7 +1188,8 @@ std::string GfxRenderer::truncatedText(const int fontId, const char* text, const
   if (!text || maxWidth <= 0) return "";
 
   std::string item = text;
-  const char* ellipsis = "...";
+  // U+2026 HORIZONTAL ELLIPSIS (UTF-8: 0xE2 0x80 0xA6)
+  const char* ellipsis = "\xe2\x80\xa6";
   int textWidth = getTextWidth(fontId, item.c_str(), style);
   if (textWidth <= maxWidth) {
     // Text fits, return as is
@@ -1082,8 +1203,71 @@ std::string GfxRenderer::truncatedText(const int fontId, const char* text, const
   return item.empty() ? ellipsis : item + ellipsis;
 }
 
-// Note: Internal driver treats screen in command orientation; this library
-// exposes a logical orientation
+std::vector<std::string> GfxRenderer::wrappedText(const int fontId, const char* text, const int maxWidth,
+                                                  const int maxLines, const EpdFontFamily::Style style) const {
+  std::vector<std::string> lines;
+
+  if (!text || maxWidth <= 0 || maxLines <= 0) return lines;
+
+  std::string remaining = text;
+  std::string currentLine;
+
+  while (!remaining.empty()) {
+    if (static_cast<int>(lines.size()) == maxLines - 1) {
+      // Last available line: combine any word already started on this line with
+      // the rest of the text, then let truncatedText fit it with an ellipsis.
+      std::string lastContent = currentLine.empty() ? remaining : currentLine + " " + remaining;
+      lines.push_back(truncatedText(fontId, lastContent.c_str(), maxWidth, style));
+      return lines;
+    }
+
+    // Find next word
+    size_t spacePos = remaining.find(' ');
+    std::string word;
+
+    if (spacePos == std::string::npos) {
+      word = remaining;
+      remaining.clear();
+    } else {
+      word = remaining.substr(0, spacePos);
+      remaining.erase(0, spacePos + 1);
+    }
+
+    std::string testLine = currentLine.empty() ? word : currentLine + " " + word;
+
+    if (getTextWidth(fontId, testLine.c_str(), style) <= maxWidth) {
+      currentLine = testLine;
+    } else {
+      if (!currentLine.empty()) {
+        lines.push_back(currentLine);
+        // If the carried-over word itself exceeds maxWidth, truncate it and
+        // push it as a complete line immediately — storing it in currentLine
+        // would allow a subsequent short word to be appended after the ellipsis.
+        if (getTextWidth(fontId, word.c_str(), style) > maxWidth) {
+          lines.push_back(truncatedText(fontId, word.c_str(), maxWidth, style));
+          currentLine.clear();
+          if (static_cast<int>(lines.size()) >= maxLines) return lines;
+        } else {
+          currentLine = word;
+        }
+      } else {
+        // Single word wider than maxWidth: truncate and stop to avoid complicated
+        // splitting rules (different between languages). Results in an aesthetically
+        // pleasing end.
+        lines.push_back(truncatedText(fontId, word.c_str(), maxWidth, style));
+        return lines;
+      }
+    }
+  }
+
+  if (!currentLine.empty() && static_cast<int>(lines.size()) < maxLines) {
+    lines.push_back(currentLine);
+  }
+
+  return lines;
+}
+
+// Note: Internal driver treats screen in command orientation; this library exposes a logical orientation
 int GfxRenderer::getScreenWidth() const {
   switch (orientation) {
     case Portrait:
@@ -1112,18 +1296,18 @@ int GfxRenderer::getScreenHeight() const {
   return HalDisplay::DISPLAY_WIDTH;
 }
 
-int GfxRenderer::getSpaceWidth(const int fontId) const {
+int GfxRenderer::getSpaceWidth(const int fontId, const EpdFontFamily::Style style) const {
   const int effectiveFontId = getEffectiveFontId(fontId);
   if (fontMap.count(effectiveFontId) == 0) {
     // UI fonts may not be in fontMap (they use built-in CJK font)
     if (isUiFont(fontId)) {
       return 10;  // Default space width for 20px UI font
     }
-    Serial.printf("[%lu] [GFX] Font %d not found\n", millis(), effectiveFontId);
+    LOG_ERR("GFX", "Font %d not found", effectiveFontId);
     return 0;
   }
 
-  // Use external font's space advance when active — keeps word/space metrics consistent
+  // Use external font's space advance when active - keeps word/space metrics consistent
   if (isReaderFont(fontId)) {
     FontManager& fm = FontManager::getInstance();
     if (fm.isExternalFontEnabled()) {
@@ -1136,19 +1320,47 @@ int GfxRenderer::getSpaceWidth(const int fontId) const {
     }
   }
 
-  return fontMap.at(effectiveFontId).getGlyph(' ', EpdFontFamily::REGULAR)->advanceX;
+  const EpdGlyph* spaceGlyph = fontMap.at(effectiveFontId).getGlyph(' ', style);
+  return spaceGlyph ? spaceGlyph->advanceX : 0;
 }
 
-int GfxRenderer::getTextAdvanceX(const int fontId, const char* text) const {
-  if (fontMap.count(fontId) == 0) {
-    Serial.printf("[%lu] [GFX] Font %d not found\n", millis(), fontId);
+int GfxRenderer::getSpaceKernAdjust(const int fontId, const uint32_t leftCp, const uint32_t rightCp,
+                                    const EpdFontFamily::Style style) const {
+  const auto fontIt = fontMap.find(fontId);
+  if (fontIt == fontMap.end()) return 0;
+  const auto& font = fontIt->second;
+  return font.getKerning(leftCp, ' ', style) + font.getKerning(' ', rightCp, style);
+}
+
+int GfxRenderer::getKerning(const int fontId, const uint32_t leftCp, const uint32_t rightCp,
+                            const EpdFontFamily::Style style) const {
+  const auto fontIt = fontMap.find(fontId);
+  if (fontIt == fontMap.end()) return 0;
+  return fontIt->second.getKerning(leftCp, rightCp, style);
+}
+
+int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFamily::Style style) const {
+  const auto fontIt = fontMap.find(fontId);
+  if (fontIt == fontMap.end()) {
+    LOG_ERR("GFX", "Font %d not found", fontId);
     return 0;
   }
 
   uint32_t cp;
+  uint32_t prevCp = 0;
   int width = 0;
+  const auto& font = fontIt->second;
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text)))) {
-    width += fontMap.at(fontId).getGlyph(cp, EpdFontFamily::REGULAR)->advanceX;
+    if (utf8IsCombiningMark(cp)) {
+      continue;
+    }
+    cp = font.applyLigatures(cp, text, style);
+    if (prevCp != 0) {
+      width += font.getKerning(prevCp, cp, style);
+    }
+    const EpdGlyph* glyph = font.getGlyph(cp, style);
+    if (glyph) width += glyph->advanceX;
+    prevCp = cp;
   }
   return width;
 }
@@ -1172,7 +1384,7 @@ int GfxRenderer::getFontAscenderSize(const int fontId) const {
     if (isUiFont(fontId)) {
       return CjkUiFont20::CJK_UI_FONT_HEIGHT;
     }
-    Serial.printf("[%lu] [GFX] Font %d not found\n", millis(), effectiveFontId);
+    LOG_ERR("GFX", "Font %d not found", effectiveFontId);
     return 0;
   }
 
@@ -1198,11 +1410,200 @@ int GfxRenderer::getLineHeight(const int fontId) const {
     if (isUiFont(fontId)) {
       return CjkUiFont20::CJK_UI_FONT_HEIGHT + 4;  // 20px + 4px spacing
     }
-    Serial.printf("[%lu] [GFX] Font %d not found\n", millis(), effectiveFontId);
+    LOG_ERR("GFX", "Font %d not found", effectiveFontId);
     return 0;
   }
 
   return fontMap.at(effectiveFontId).getData(EpdFontFamily::REGULAR)->advanceY;
+}
+
+int GfxRenderer::getTextHeight(const int fontId) const {
+  const int effectiveFontId = getEffectiveFontId(fontId);
+  if (fontMap.count(effectiveFontId) == 0) {
+    // UI fonts may not be in fontMap (they use built-in CJK font)
+    if (isUiFont(fontId)) {
+      return CjkUiFont20::CJK_UI_FONT_HEIGHT;  // 20px for CJK UI font
+    }
+    LOG_ERR("GFX", "Font %d not found", effectiveFontId);
+    return 0;
+  }
+  return fontMap.at(effectiveFontId).getData(EpdFontFamily::REGULAR)->ascender;
+}
+
+void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y, const char* text, const bool black,
+                                      const EpdFontFamily::Style style) const {
+  // Cannot draw a NULL / empty string
+  if (text == nullptr || *text == '\0') {
+    return;
+  }
+
+  const int effectiveFontId = getEffectiveFontId(fontId);
+  if (fontMap.count(effectiveFontId) == 0) {
+    // UI fonts may not be in fontMap (they use built-in CJK font)
+    if (isUiFont(fontId)) {
+      // Render using built-in CJK UI font directly (rotated)
+      int yPos = y;  // Current Y position (decreases as we draw characters)
+      const char* ptr = text;
+      uint32_t cp;
+      while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&ptr)))) {
+        if (CjkUiFont20::hasCjkUiGlyph(cp)) {
+          const uint8_t* bitmap = CjkUiFont20::getCjkUiGlyph(cp);
+          const uint8_t width = CjkUiFont20::getCjkUiGlyphWidth(cp);
+          const uint8_t height = CjkUiFont20::CJK_UI_FONT_HEIGHT;
+          const uint8_t bytesPerRow = CjkUiFont20::CJK_UI_FONT_BYTES_PER_ROW;
+
+          // For 90 clockwise rotation: (glyphX, glyphY) -> (glyphY, -glyphX)
+          const int startX = x;
+          for (uint8_t glyphY = 0; glyphY < height; glyphY++) {
+            const int screenX = startX + glyphY;
+            for (uint8_t glyphX = 0; glyphX < width; glyphX++) {
+              const uint8_t byteIndex = glyphY * bytesPerRow + (glyphX / 8);
+              const uint8_t bitIndex = 7 - (glyphX % 8);
+              const uint8_t byte = pgm_read_byte(&bitmap[byteIndex]);
+              if ((byte >> bitIndex) & 1) {
+                const int screenY = yPos - glyphX;
+                drawPixel(screenX, screenY, black);
+              }
+            }
+          }
+          yPos -= width;
+        } else {
+          yPos -= 10;  // Default width for unknown characters
+        }
+      }
+      return;
+    }
+    LOG_ERR("GFX", "Font %d not found", effectiveFontId);
+    return;
+  }
+  const auto font = fontMap.at(effectiveFontId);
+
+  // No printable characters
+  if (!font.hasPrintableChars(text, style)) {
+    if (isReaderFont(fontId)) {
+      return;
+    }
+    if (!hasUiGlyphForText(text)) {
+      return;
+    }
+  }
+
+  // For 90 clockwise rotation:
+  // Original (glyphX, glyphY) -> Rotated (glyphY, -glyphX)
+  // Text reads from bottom to top
+
+  int yPos = y;  // Current Y position (decreases as we draw characters)
+
+  uint32_t cp;
+  while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text)))) {
+    // For ASCII characters, prefer EPD font (better quality for Latin text)
+    // Only use CJK UI font for non-ASCII characters or when EPD font lacks the
+    // glyph
+    bool useEpdFont = (cp < 0x80) && font.getGlyph(cp, style) != nullptr;
+
+    if (!isReaderFont(fontId) && !useEpdFont) {
+      const uint8_t* bitmap = nullptr;
+      uint8_t fontWidth = 0;
+      uint8_t fontHeight = 0;
+      uint8_t bytesPerRow = 0;
+      uint8_t bytesPerChar = 0;
+      uint8_t advance = 0;
+
+      if (CjkUiFont20::hasCjkUiGlyph(cp)) {
+        bitmap = CjkUiFont20::getCjkUiGlyph(cp);
+        fontWidth = CjkUiFont20::CJK_UI_FONT_WIDTH;
+        fontHeight = CjkUiFont20::CJK_UI_FONT_HEIGHT;
+        bytesPerRow = CjkUiFont20::CJK_UI_FONT_BYTES_PER_ROW;
+        bytesPerChar = CjkUiFont20::CJK_UI_FONT_BYTES_PER_CHAR;
+        advance = CjkUiFont20::getCjkUiGlyphWidth(cp);
+      }
+
+      if (bitmap && advance > 0) {
+        bool hasContent = false;
+        for (int i = 0; i < bytesPerChar; i++) {
+          if (pgm_read_byte(&bitmap[i]) != 0) {
+            hasContent = true;
+            break;
+          }
+        }
+
+        if (hasContent) {
+          const int startX = x;
+
+          for (int glyphY = 0; glyphY < fontHeight; glyphY++) {
+            const int screenX = startX + glyphY;
+            for (int glyphX = 0; glyphX < fontWidth; glyphX++) {
+              const int byteIndex = glyphY * bytesPerRow + (glyphX / 8);
+              const int bitIndex = 7 - (glyphX % 8);
+              const uint8_t byte = pgm_read_byte(&bitmap[byteIndex]);
+              if ((byte >> bitIndex) & 1) {
+                const int screenY = yPos - glyphX;
+                drawPixel(screenX, screenY, black);
+              }
+            }
+          }
+        }
+
+        yPos -= std::max(1, static_cast<int>(advance));
+        continue;
+      }
+    }
+
+    const EpdGlyph* glyph = font.getGlyph(cp, style);
+    if (!glyph) {
+      glyph = font.getGlyph('?', style);
+    }
+    if (!glyph) {
+      continue;
+    }
+
+    const EpdFontData* fontData = font.getData(style);
+    const int is2Bit = fontData->is2Bit;
+    const uint8_t width = glyph->width;
+    const uint8_t height = glyph->height;
+    const int left = glyph->left;
+    const int top = glyph->top;
+
+    const uint8_t* bitmap = getGlyphBitmap(fontData, glyph);
+
+    if (bitmap != nullptr) {
+      for (int glyphY = 0; glyphY < height; glyphY++) {
+        for (int glyphX = 0; glyphX < width; glyphX++) {
+          const int pixelPosition = glyphY * width + glyphX;
+
+          // 90 clockwise rotation transformation:
+          // screenX = x + (ascender - top + glyphY)
+          // screenY = yPos - (left + glyphX)
+          const int screenX = x + (fontData->ascender - top + glyphY);
+          const int screenY = yPos - left - glyphX;
+
+          if (is2Bit) {
+            const uint8_t byte = bitmap[pixelPosition / 4];
+            const uint8_t bit_index = (3 - pixelPosition % 4) * 2;
+            const uint8_t bmpVal = 3 - ((byte >> bit_index) & 0x3);
+
+            if (renderMode == BW && bmpVal < 3) {
+              drawPixel(screenX, screenY, black);
+            } else if (renderMode == GRAYSCALE_MSB && (bmpVal == 1 || bmpVal == 2)) {
+              drawPixel(screenX, screenY, false);
+            } else if (renderMode == GRAYSCALE_LSB && bmpVal == 1) {
+              drawPixel(screenX, screenY, false);
+            }
+          } else {
+            const uint8_t byte = bitmap[pixelPosition / 8];
+            const uint8_t bit_index = 7 - (pixelPosition % 8);
+
+            if ((byte >> bit_index) & 1) {
+              drawPixel(screenX, screenY, black);
+            }
+          }
+        }
+      }
+    }
+
+    // Move to next character position (going up, so decrease Y)
+    yPos -= glyph->advanceX;
+  }
 }
 
 void GfxRenderer::drawButtonHints(const int fontId, const char* btn1, const char* btn2, const char* btn3,
@@ -1329,195 +1730,6 @@ void GfxRenderer::drawSideButtonHints(const int fontId, const char* topBtn, cons
   }
 }
 
-int GfxRenderer::getTextHeight(const int fontId) const {
-  const int effectiveFontId = getEffectiveFontId(fontId);
-  if (fontMap.count(effectiveFontId) == 0) {
-    // UI fonts may not be in fontMap (they use built-in CJK font)
-    if (isUiFont(fontId)) {
-      return CjkUiFont20::CJK_UI_FONT_HEIGHT;  // 20px for CJK UI font
-    }
-    Serial.printf("[%lu] [GFX] Font %d not found\n", millis(), effectiveFontId);
-    return 0;
-  }
-  return fontMap.at(effectiveFontId).getData(EpdFontFamily::REGULAR)->ascender;
-}
-
-void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y, const char* text, const bool black,
-                                      const EpdFontFamily::Style style) const {
-  // Cannot draw a NULL / empty string
-  if (text == nullptr || *text == '\0') {
-    return;
-  }
-
-  const int effectiveFontId = getEffectiveFontId(fontId);
-  if (fontMap.count(effectiveFontId) == 0) {
-    // UI fonts may not be in fontMap (they use built-in CJK font)
-    if (isUiFont(fontId)) {
-      // Render using built-in CJK UI font directly (rotated)
-      int yPos = y;  // Current Y position (decreases as we draw characters)
-      const char* ptr = text;
-      uint32_t cp;
-      while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&ptr)))) {
-        if (CjkUiFont20::hasCjkUiGlyph(cp)) {
-          const uint8_t* bitmap = CjkUiFont20::getCjkUiGlyph(cp);
-          const uint8_t width = CjkUiFont20::getCjkUiGlyphWidth(cp);
-          const uint8_t height = CjkUiFont20::CJK_UI_FONT_HEIGHT;
-          const uint8_t bytesPerRow = CjkUiFont20::CJK_UI_FONT_BYTES_PER_ROW;
-
-          // For 90 clockwise rotation: (glyphX, glyphY) -> (glyphY, -glyphX)
-          const int startX = x;
-          for (uint8_t glyphY = 0; glyphY < height; glyphY++) {
-            const int screenX = startX + glyphY;
-            for (uint8_t glyphX = 0; glyphX < width; glyphX++) {
-              const uint8_t byteIndex = glyphY * bytesPerRow + (glyphX / 8);
-              const uint8_t bitIndex = 7 - (glyphX % 8);
-              const uint8_t byte = pgm_read_byte(&bitmap[byteIndex]);
-              if ((byte >> bitIndex) & 1) {
-                const int screenY = yPos - glyphX;
-                drawPixel(screenX, screenY, black);
-              }
-            }
-          }
-          yPos -= width;
-        } else {
-          yPos -= 10;  // Default width for unknown characters
-        }
-      }
-      return;
-    }
-    Serial.printf("[%lu] [GFX] Font %d not found\n", millis(), effectiveFontId);
-    return;
-  }
-  const auto font = fontMap.at(effectiveFontId);
-
-  // No printable characters
-  if (!font.hasPrintableChars(text, style)) {
-    if (isReaderFont(fontId)) {
-      return;
-    }
-    if (!hasUiGlyphForText(text)) {
-      return;
-    }
-  }
-
-  // For 90 clockwise rotation:
-  // Original (glyphX, glyphY) -> Rotated (glyphY, -glyphX)
-  // Text reads from bottom to top
-
-  int yPos = y;  // Current Y position (decreases as we draw characters)
-
-  uint32_t cp;
-  while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text)))) {
-    // For ASCII characters, prefer EPD font (better quality for Latin text)
-    // Only use CJK UI font for non-ASCII characters or when EPD font lacks the
-    // glyph
-    bool useEpdFont = (cp < 0x80) && font.getGlyph(cp, style) != nullptr;
-
-    if (!isReaderFont(fontId) && !useEpdFont) {
-      const uint8_t* bitmap = nullptr;
-      uint8_t fontWidth = 0;
-      uint8_t fontHeight = 0;
-      uint8_t bytesPerRow = 0;
-      uint8_t bytesPerChar = 0;
-      uint8_t advance = 0;
-
-      if (CjkUiFont20::hasCjkUiGlyph(cp)) {
-        bitmap = CjkUiFont20::getCjkUiGlyph(cp);
-        fontWidth = CjkUiFont20::CJK_UI_FONT_WIDTH;
-        fontHeight = CjkUiFont20::CJK_UI_FONT_HEIGHT;
-        bytesPerRow = CjkUiFont20::CJK_UI_FONT_BYTES_PER_ROW;
-        bytesPerChar = CjkUiFont20::CJK_UI_FONT_BYTES_PER_CHAR;
-        advance = CjkUiFont20::getCjkUiGlyphWidth(cp);
-      }
-
-      if (bitmap && advance > 0) {
-        bool hasContent = false;
-        for (int i = 0; i < bytesPerChar; i++) {
-          if (pgm_read_byte(&bitmap[i]) != 0) {
-            hasContent = true;
-            break;
-          }
-        }
-
-        if (hasContent) {
-          const int startX = x;
-
-          for (int glyphY = 0; glyphY < fontHeight; glyphY++) {
-            const int screenX = startX + glyphY;
-            for (int glyphX = 0; glyphX < fontWidth; glyphX++) {
-              const int byteIndex = glyphY * bytesPerRow + (glyphX / 8);
-              const int bitIndex = 7 - (glyphX % 8);
-              const uint8_t byte = pgm_read_byte(&bitmap[byteIndex]);
-              if ((byte >> bitIndex) & 1) {
-                const int screenY = yPos - glyphX;
-                drawPixel(screenX, screenY, black);
-              }
-            }
-          }
-        }
-
-        yPos -= std::max(1, static_cast<int>(advance));
-        continue;
-      }
-    }
-
-    const EpdGlyph* glyph = font.getGlyph(cp, style);
-    if (!glyph) {
-      glyph = font.getGlyph('?', style);
-    }
-    if (!glyph) {
-      continue;
-    }
-
-    const int is2Bit = font.getData(style)->is2Bit;
-    const uint32_t offset = glyph->dataOffset;
-    const uint8_t width = glyph->width;
-    const uint8_t height = glyph->height;
-    const int left = glyph->left;
-    const int top = glyph->top;
-
-    const uint8_t* bitmap = &font.getData(style)->bitmap[offset];
-
-    if (bitmap != nullptr) {
-      for (int glyphY = 0; glyphY < height; glyphY++) {
-        for (int glyphX = 0; glyphX < width; glyphX++) {
-          const int pixelPosition = glyphY * width + glyphX;
-
-          // 90 clockwise rotation transformation:
-          // screenX = x + (ascender - top + glyphY)
-          // screenY = yPos - (left + glyphX)
-          const int screenX = x + (font.getData(style)->ascender - top + glyphY);
-          const int screenY = yPos - left - glyphX;
-
-          if (is2Bit) {
-            const uint8_t byte = bitmap[pixelPosition / 4];
-            const uint8_t bit_index = (3 - pixelPosition % 4) * 2;
-            const uint8_t bmpVal = 3 - (byte >> bit_index) & 0x3;
-
-            if (renderMode == BW && bmpVal < 3) {
-              drawPixel(screenX, screenY, black);
-            } else if (renderMode == GRAYSCALE_MSB && (bmpVal == 1 || bmpVal == 2)) {
-              drawPixel(screenX, screenY, false);
-            } else if (renderMode == GRAYSCALE_LSB && bmpVal == 1) {
-              drawPixel(screenX, screenY, false);
-            }
-          } else {
-            const uint8_t byte = bitmap[pixelPosition / 8];
-            const uint8_t bit_index = 7 - (pixelPosition % 8);
-
-            if ((byte >> bit_index) & 1) {
-              drawPixel(screenX, screenY, black);
-            }
-          }
-        }
-      }
-    }
-
-    // Move to next character position (going up, so decrease Y)
-    yPos -= glyph->advanceX;
-  }
-}
-
 uint8_t* GfxRenderer::getFrameBuffer() const { return frameBuffer; }
 
 size_t GfxRenderer::getBufferSize() { return HalDisplay::BUFFER_SIZE; }
@@ -1546,20 +1758,16 @@ void GfxRenderer::freeBwBufferChunks() {
 
 /**
  * This should be called before grayscale buffers are populated.
- * A `restoreBwBuffer` call should always follow the grayscale render if this
- * method was called. Uses chunked allocation to avoid needing 48KB of
- * contiguous memory. Returns true if buffer was stored successfully, false if
- * allocation failed.
+ * A `restoreBwBuffer` call should always follow the grayscale render if this method was called.
+ * Uses chunked allocation to avoid needing 48KB of contiguous memory.
+ * Returns true if buffer was stored successfully, false if allocation failed.
  */
 bool GfxRenderer::storeBwBuffer() {
   // Allocate and copy each chunk
   for (size_t i = 0; i < BW_BUFFER_NUM_CHUNKS; i++) {
     // Check if any chunks are already allocated
     if (bwBufferChunks[i]) {
-      Serial.printf(
-          "[%lu] [GFX] !! BW buffer chunk %zu already stored - this "
-          "is likely a bug, freeing chunk\n",
-          millis(), i);
+      LOG_ERR("GFX", "!! BW buffer chunk %zu already stored - this is likely a bug, freeing chunk", i);
       free(bwBufferChunks[i]);
       bwBufferChunks[i] = nullptr;
     }
@@ -1568,8 +1776,7 @@ bool GfxRenderer::storeBwBuffer() {
     bwBufferChunks[i] = static_cast<uint8_t*>(malloc(BW_BUFFER_CHUNK_SIZE));
 
     if (!bwBufferChunks[i]) {
-      Serial.printf("[%lu] [GFX] !! Failed to allocate BW buffer chunk %zu (%zu bytes)\n", millis(), i,
-                    BW_BUFFER_CHUNK_SIZE);
+      LOG_ERR("GFX", "!! Failed to allocate BW buffer chunk %zu (%zu bytes)", i, BW_BUFFER_CHUNK_SIZE);
       // Free previously allocated chunks
       freeBwBufferChunks();
       return false;
@@ -1578,18 +1785,17 @@ bool GfxRenderer::storeBwBuffer() {
     memcpy(bwBufferChunks[i], frameBuffer + offset, BW_BUFFER_CHUNK_SIZE);
   }
 
-  Serial.printf("[%lu] [GFX] Stored BW buffer in %zu chunks (%zu bytes each)\n", millis(), BW_BUFFER_NUM_CHUNKS,
-                BW_BUFFER_CHUNK_SIZE);
+  LOG_DBG("GFX", "Stored BW buffer in %zu chunks (%zu bytes each)", BW_BUFFER_NUM_CHUNKS, BW_BUFFER_CHUNK_SIZE);
   return true;
 }
 
 /**
- * This can only be called if `storeBwBuffer` was called prior to the grayscale
- * render. It should be called to restore the BW buffer state after grayscale
- * rendering is complete. Uses chunked restoration to match chunked storage.
+ * This can only be called if `storeBwBuffer` was called prior to the grayscale render.
+ * It should be called to restore the BW buffer state after grayscale rendering is complete.
+ * Uses chunked restoration to match chunked storage.
  */
 void GfxRenderer::restoreBwBuffer() {
-  // Check if any all chunks are allocated
+  // Check if all chunks are allocated
   bool missingChunks = false;
   for (const auto& bwBufferChunk : bwBufferChunks) {
     if (!bwBufferChunk) {
@@ -1604,13 +1810,6 @@ void GfxRenderer::restoreBwBuffer() {
   }
 
   for (size_t i = 0; i < BW_BUFFER_NUM_CHUNKS; i++) {
-    // Check if chunk is missing
-    if (!bwBufferChunks[i]) {
-      Serial.printf("[%lu] [GFX] !! BW buffer chunks not stored - this is likely a bug\n", millis());
-      freeBwBufferChunks();
-      return;
-    }
-
     const size_t offset = i * BW_BUFFER_CHUNK_SIZE;
     memcpy(frameBuffer + offset, bwBufferChunks[i], BW_BUFFER_CHUNK_SIZE);
   }
@@ -1618,7 +1817,7 @@ void GfxRenderer::restoreBwBuffer() {
   display.cleanupGrayscaleBuffers(frameBuffer);
 
   freeBwBufferChunks();
-  Serial.printf("[%lu] [GFX] Restored and freed BW buffer chunks\n", millis());
+  LOG_DBG("GFX", "Restored and freed BW buffer chunks");
 }
 
 /**
@@ -1629,44 +1828,6 @@ void GfxRenderer::cleanupGrayscaleWithFrameBuffer() const {
   if (frameBuffer) {
     display.cleanupGrayscaleBuffers(frameBuffer);
   }
-}
-
-// Check if fontId is a reader font (should use external Chinese font)
-// UI fonts (UI_10, UI_12, SMALL_FONT) should NOT use external font
-bool GfxRenderer::isReaderFont(const int fontId) {
-  // First check if it's a UI font - UI fonts should NOT use external reader
-  // font
-  for (int i = 0; i < UI_FONT_COUNT; i++) {
-    if (UI_FONT_IDS[i] == fontId) {
-      return false;  // This is a UI font, not a reader font
-    }
-  }
-
-  // External font IDs are negative (from CrossPointSettings::getReaderFontId())
-  if (fontId < 0) {
-    return true;
-  }
-
-  for (int i = 0; i < READER_FONT_COUNT; i++) {
-    if (READER_FONT_IDS[i] == fontId) {
-      return true;
-    }
-  }
-  return false;
-}
-
-// Get effective font ID, handling fallback for external reader font IDs
-// When external font is selected (negative ID) but not available, fall back to
-// built-in font
-int GfxRenderer::getEffectiveFontId(int fontId) const {
-  // Only negative IDs that are reader fonts need fallback
-  // UI fonts have negative IDs too but should not be redirected
-  if (fontId < 0 && isReaderFont(fontId)) {
-    // This is an external reader font ID, use the selected built-in reader
-    // font as fallback
-    return readerFallbackFontId != 0 ? readerFallbackFontId : READER_FONT_IDS[0];
-  }
-  return fontId;
 }
 
 void GfxRenderer::renderChar(const int fontId, const EpdFontFamily& fontFamily, const uint32_t cp, int* x, const int* y,
@@ -1767,15 +1928,12 @@ void GfxRenderer::renderChar(const int fontId, const EpdFontFamily& fontFamily, 
 
   const EpdGlyph* glyph = fontFamily.getGlyph(cp, style);
   if (!glyph) {
-    // TODO: Replace with fallback glyph property?
     glyph = fontFamily.getGlyph('?', style);
   }
 
   // no glyph? Still advance cursor to prevent overlap
   if (!glyph) {
-    Serial.printf("[%lu] [GFX] No glyph for codepoint %d\n", millis(), cp);
-    // Use a default advance width to prevent character overlap
-    // For CJK-like characters, use full width; otherwise use half width
+    LOG_ERR("GFX", "No glyph for codepoint %d", cp);
     if (isCjk) {
       *x += 20;  // Full-width character default
     } else {
@@ -1784,14 +1942,13 @@ void GfxRenderer::renderChar(const int fontId, const EpdFontFamily& fontFamily, 
     return;
   }
 
-  const int is2Bit = fontFamily.getData(style)->is2Bit;
-  const uint32_t offset = glyph->dataOffset;
+  const EpdFontData* fontData = fontFamily.getData(style);
+  const bool is2Bit = fontData->is2Bit;
   const uint8_t width = glyph->width;
   const uint8_t height = glyph->height;
   const int left = glyph->left;
 
-  const uint8_t* bitmap = nullptr;
-  bitmap = &fontFamily.getData(style)->bitmap[offset];
+  const uint8_t* bitmap = getGlyphBitmap(fontData, glyph);
 
   if (bitmap != nullptr) {
     for (int glyphY = 0; glyphY < height; glyphY++) {
@@ -1803,24 +1960,15 @@ void GfxRenderer::renderChar(const int fontId, const EpdFontFamily& fontFamily, 
         if (is2Bit) {
           const uint8_t byte = bitmap[pixelPosition / 4];
           const uint8_t bit_index = (3 - pixelPosition % 4) * 2;
-          // the direct bit from the font is 0 -> white, 1 -> light gray, 2 ->
-          // dark gray, 3 -> black we swap this to better match the way images
-          // and screen think about colors: 0 -> black, 1 -> dark grey, 2 ->
-          // light grey, 3 -> white
-          const uint8_t bmpVal = 3 - (byte >> bit_index) & 0x3;
+          const uint8_t bmpVal = 3 - ((byte >> bit_index) & 0x3);
 
           if (renderMode == BW) {
             bool shouldDraw = false;
             if (darkMode) {
-              // In dark mode, do NOT draw anti-aliasing edges (bmpVal 1, 2)
-              // as they must remain black (background) to be lightened to gray
-              // in the grayscale pass. Only draw core ink (bmpVal 0).
               if (bmpVal == 0) {
                 shouldDraw = true;
               }
             } else if (bmpVal < 3) {
-              // In light mode, draw core and grays as black.
-              // They will be lightened to grays later.
               shouldDraw = true;
             }
 
@@ -1828,33 +1976,13 @@ void GfxRenderer::renderChar(const int fontId, const EpdFontFamily& fontFamily, 
               drawPixel(screenX, screenY, pixelState);
             }
           } else if (renderMode == GRAYSCALE_MSB || renderMode == GRAYSCALE_LSB) {
-            // Processing for grayscale buffers (LSB/MSB)
-            // Map pixel values:
-            // Light Mode: 0=Black(00), 1=DarkGray(01), 2=LightGray(10),
-            // 3=White(11) Dark Mode:  Invert brightness -> 0=White(11),
-            // 1=LightGray(10), 2=DarkGray(01), 3=Black(00)
-
-            // Only draw ink pixels (val < 3). Assume background (val 3) is
-            // already cleared correctly.
             if (bmpVal < 3) {
               uint8_t val = bmpVal;
               if (darkMode) {
-                // Invert brightness for dark mode
                 val = 3 - val;
               }
-
-              // Extract bit for current plane
               bool bit = (renderMode == GRAYSCALE_LSB) ? (val & 1) : ((val >> 1) & 1);
-
-              // drawPixel(true) -> Clear bit (0), drawPixel(false) -> Set bit
-              // (1)
               drawPixel(screenX, screenY, !bit);
-            } else if (darkMode && bmpVal == 3) {
-              // For Dark Mode Background (bmpVal=3, White in source), we want
-              // it to be mapped to 11 (Group 3) The new LUT will treat Group 3
-              // as "Drive Black". Existing buffer clear color for Dark Mode is
-              // 0xFF (11). So we don't need to do anything - the background is
-              // already 11.
             }
           }
         } else {
@@ -1899,6 +2027,44 @@ void GfxRenderer::getOrientedViewableTRBL(int* outTop, int* outRight, int* outBo
       *outLeft = VIEWABLE_MARGIN_TOP;
       break;
   }
+}
+
+// Check if fontId is a reader font (should use external Chinese font)
+// UI fonts (UI_10, UI_12, SMALL_FONT) should NOT use external font
+bool GfxRenderer::isReaderFont(const int fontId) {
+  // First check if it's a UI font - UI fonts should NOT use external reader
+  // font
+  for (int i = 0; i < UI_FONT_COUNT; i++) {
+    if (UI_FONT_IDS[i] == fontId) {
+      return false;  // This is a UI font, not a reader font
+    }
+  }
+
+  // External font IDs are negative (from CrossPointSettings::getReaderFontId())
+  if (fontId < 0) {
+    return true;
+  }
+
+  for (int i = 0; i < READER_FONT_COUNT; i++) {
+    if (READER_FONT_IDS[i] == fontId) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Get effective font ID, handling fallback for external reader font IDs
+// When external font is selected (negative ID) but not available, fall back to
+// built-in font
+int GfxRenderer::getEffectiveFontId(int fontId) const {
+  // Only negative IDs that are reader fonts need fallback
+  // UI fonts have negative IDs too but should not be redirected
+  if (fontId < 0 && isReaderFont(fontId)) {
+    // This is an external reader font ID, use the selected built-in reader
+    // font as fallback
+    return readerFallbackFontId != 0 ? readerFallbackFontId : READER_FONT_IDS[0];
+  }
+  return fontId;
 }
 
 void GfxRenderer::renderExternalGlyph(const uint8_t* bitmap, ExternalFont* font, int* x, const int y,
@@ -1953,12 +2119,6 @@ void GfxRenderer::renderBuiltinCjkGlyph(const uint32_t cp, int* x, const int y, 
   }
 
   if (hasContent) {
-    // Calculate starting Y position for CJK fonts
-    // The 'y' parameter is the baseline position
-    // For UI fonts, we need to align CJK glyphs with the baseline
-    // CJK fonts are typically designed to sit on the baseline with some descent
-    // Use a simpler calculation: place CJK glyph so its bottom aligns near
-    // baseline
     const int startY = y - fontHeight + 4;  // 4px descent for CJK characters
 
     for (int glyphY = 0; glyphY < fontHeight; glyphY++) {

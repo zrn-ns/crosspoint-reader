@@ -35,6 +35,30 @@ This project adapts the original CrossPoint Reader for CJK support, featuring a 
 - **Dark/Light Mode Switching**: Applies to both reader and UI.
 - Smooth theme switching without full refresh.
 
+### 📖 Upstream Features
+
+- [x] EPUB parsing and rendering (EPUB 2 and EPUB 3)
+- [x] Image support within EPUB
+- [x] Saved reading position
+- [x] File explorer with file picker
+  - [x] Basic EPUB picker from root directory
+  - [x] Support nested folders
+  - [ ] EPUB picker with cover art
+- [x] Custom sleep screen
+  - [x] Cover sleep screen
+- [x] Wifi book upload
+- [x] Wifi OTA updates
+- [x] Configurable font, layout, and display options
+  - [ ] User provided fonts
+  - [ ] Full UTF support
+- [x] Screen rotation
+
+Multi-language support: Read EPUBs in various languages, including English, Spanish, French, German, Italian, Portuguese, Russian, Ukrainian, Polish, Swedish, Norwegian, [and more](./USER_GUIDE.md#supported-languages).
+
+See [the user guide](./USER_GUIDE.md) for instructions on operating CrossPoint.
+
+For more details about the scope of the project, see the [SCOPE.md](SCOPE.md) document.
+
 ### 📖 Reading Layout
 
 - **First Line Indent**: Toggle paragraph indentation via CSS `text-indent` for improved readability.
@@ -73,6 +97,12 @@ For detailed operation instructions, please refer to the [User Guide](./USER_GUI
 
 ## 📥 Installation
 
+### Upstream Web Flashing
+
+1. Connect your Xteink X4 to your computer via USB-C
+2. Download the `firmware.bin` file from the release of your choice via the [releases page](https://github.com/crosspoint-reader/crosspoint-reader/releases)
+3. Go to https://xteink.dve.al/ and flash the firmware file using the "OTA fast flash controls" section
+
 ### Web Flashing (Recommended)
 
 1. Connect the Xteink X4 to your computer via USB-C.
@@ -94,7 +124,7 @@ For detailed operation instructions, please refer to the [User Guide](./USER_GUI
 ```bash
 git clone --recursive https://github.com/aBER0724/crosspoint-reader-cjk
 
-# If submodules are missing after cloning
+# Or, if you've already cloned without --recursive:
 git submodule update --init --recursive
 ```
 
@@ -105,6 +135,25 @@ Run the following command after connecting the device:
 ```bash
 pio run --target upload
 ```
+### Debugging
+
+After flashing the new features, it’s recommended to capture detailed logs from the serial port.
+
+First, make sure all required Python packages are installed:
+
+```python
+python3 -m pip install pyserial colorama matplotlib
+```
+after that run the script:
+```sh
+# For Linux
+# This was tested on Debian and should work on most Linux systems.
+python3 scripts/debugging_monitor.py
+
+# For macOS
+python3 scripts/debugging_monitor.py /dev/cu.usbmodem2101
+```
+Minor adjustments may be required for Windows.
 
 ## 🔠 Fonts
 
@@ -141,6 +190,18 @@ Examples:
 2. If stuck on a specific interface, try restarting the device.
 3. The ESP32-C3 has very limited memory. Using large CJK font files for both UI and reading fonts simultaneously may cause out-of-memory crashes. It is recommended to keep UI fonts at 20pt or below.
 4. When opening the home screen for the first time after adding new books, the device will generate cover thumbnails. A "Loading" popup may appear for a few seconds — this is normal, not a freeze.
+
+## 🤝 Contributing
+
+If you are new to the codebase, start with the [contributing docs](./docs/contributing/README.md).
+
+If you're looking for a way to help out, take a look at the [ideas discussion board](https://github.com/crosspoint-reader/crosspoint-reader/discussions/categories/ideas).
+If there's something there you'd like to work on, leave a comment so that we can avoid duplicated effort.
+
+Everyone here is a volunteer, so please be respectful and patient. For more details on our goverance and community
+principles, please see [GOVERNANCE.md](GOVERNANCE.md).
+
+### To submit a contribution:
 
 ## 📜 Credits
 

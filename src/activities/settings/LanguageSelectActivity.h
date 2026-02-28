@@ -6,33 +6,30 @@
 #include <functional>
 
 #include "../ActivityWithSubactivity.h"
+#include "components/UITheme.h"
+#include "util/ButtonNavigator.h"
 
 class MappedInputManager;
 
 /**
  * Activity for selecting UI language
  */
-class LanguageSelectActivity final : public ActivityWithSubactivity {
+class LanguageSelectActivity final : public Activity {
  public:
   explicit LanguageSelectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                   const std::function<void()>& onBack)
-      : ActivityWithSubactivity("LanguageSelect", renderer, mappedInput), onBack(onBack) {}
+      : Activity("LanguageSelect", renderer, mappedInput), onBack(onBack) {}
 
   void onEnter() override;
   void onExit() override;
   void loop() override;
+  void render(Activity::RenderLock&&) override;
 
  private:
-  static void taskTrampoline(void* param);
-  void displayTaskLoop();
-  void render();
   void handleSelection();
 
   std::function<void()> onBack;
+  ButtonNavigator buttonNavigator;
   int selectedIndex = 0;
-  static constexpr int totalItems = 3;  // English, 简体中文, 日本語
-
-  TaskHandle_t displayTaskHandle = nullptr;
-  SemaphoreHandle_t renderingMutex = nullptr;
-  volatile bool updateRequired = false;
+  int totalItems = 0;
 };

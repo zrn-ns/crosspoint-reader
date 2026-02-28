@@ -11,7 +11,6 @@
 #include <cstring>
 #include <vector>
 
-#include "Battery.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "MappedInputManager.h"
@@ -19,11 +18,6 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/StringUtils.h"
-
-void HomeActivity::taskTrampoline(void* param) {
-  auto* self = static_cast<HomeActivity*>(param);
-  self->displayTaskLoop();
-}
 
 int HomeActivity::getMenuItemCount() const {
   int count = 4;  // My Library, Recents, File transfer, Settings
@@ -75,23 +69,16 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
           // Try to generate thumbnail image for Continue Reading card
           if (!showingLoading) {
             showingLoading = true;
-            popupRect = GUI.drawPopup(renderer, TR(LOADING));
+            popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
           }
           GUI.fillPopupProgress(renderer, popupRect, 10 + progress * (90 / recentBooks.size()));
           bool success = epub.generateThumbBmp(coverHeight);
           if (!success) {
-            // Only permanently clear coverBmpPath when generateThumbBmp wrote
-            // an empty marker file (= permanent failure: non-JPG cover or no
-            // cover image).  If the thumb file was removed (= transient failure
-            // e.g. OOM during JPEG decode), keep the path so we can retry on
-            // the next home visit or reboot.
-            if (Storage.exists(coverPath.c_str())) {
-              RECENT_BOOKS.updateBook(book.path, book.title, book.author, "");
-              book.coverBmpPath = "";
-            }
+            RECENT_BOOKS.updateBook(book.path, book.title, book.author, "");
+            book.coverBmpPath = "";
           }
           coverRendered = false;
-          updateRequired = true;
+          requestUpdate();
         } else if (StringUtils::checkFileExtension(book.path, ".xtch") ||
                    StringUtils::checkFileExtension(book.path, ".xtc")) {
           // Handle XTC file
@@ -100,19 +87,16 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
             // Try to generate thumbnail image for Continue Reading card
             if (!showingLoading) {
               showingLoading = true;
-              popupRect = GUI.drawPopup(renderer, TR(LOADING));
+              popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
             }
             GUI.fillPopupProgress(renderer, popupRect, 10 + progress * (90 / recentBooks.size()));
             bool success = xtc.generateThumbBmp(coverHeight);
             if (!success) {
-              // Same as epub: only clear path on permanent failures (marker file)
-              if (Storage.exists(coverPath.c_str())) {
-                RECENT_BOOKS.updateBook(book.path, book.title, book.author, "");
-                book.coverBmpPath = "";
-              }
+              RECENT_BOOKS.updateBook(book.path, book.title, book.author, "");
+              book.coverBmpPath = "";
             }
             coverRendered = false;
-            updateRequired = true;
+            requestUpdate();
           }
         }
       }
@@ -127,38 +111,20 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
 void HomeActivity::onEnter() {
   Activity::onEnter();
 
-  renderingMutex = xSemaphoreCreateMutex();
-
   // Check if OPDS browser URL is configured
   hasOpdsUrl = strlen(SETTINGS.opdsServerUrl) > 0;
 
   selectorIndex = 0;
 
-  auto metrics = UITheme::getInstance().getMetrics();
+  const auto& metrics = UITheme::getInstance().getMetrics();
   loadRecentBooks(metrics.homeRecentBooksCount);
 
   // Trigger first update
-  updateRequired = true;
-
-  xTaskCreate(&HomeActivity::taskTrampoline, "HomeActivityTask",
-              8192,               // Stack size
-              this,               // Parameters
-              1,                  // Priority
-              &displayTaskHandle  // Task handle
-  );
+  requestUpdate();
 }
 
 void HomeActivity::onExit() {
   Activity::onExit();
-
-  // Wait until not rendering to delete task to avoid killing mid-instruction to EPD
-  xSemaphoreTake(renderingMutex, portMAX_DELAY);
-  if (displayTaskHandle) {
-    vTaskDelete(displayTaskHandle);
-    displayTaskHandle = nullptr;
-  }
-  vSemaphoreDelete(renderingMutex);
-  renderingMutex = nullptr;
 
   // Free the stored cover buffer if any
   freeCoverBuffer();
@@ -211,12 +177,12 @@ void HomeActivity::loop() {
 
   buttonNavigator.onNext([this, menuCount] {
     selectorIndex = ButtonNavigator::nextIndex(selectorIndex, menuCount);
-    updateRequired = true;
+    requestUpdate();
   });
 
   buttonNavigator.onPrevious([this, menuCount] {
     selectorIndex = ButtonNavigator::previousIndex(selectorIndex, menuCount);
-    updateRequired = true;
+    requestUpdate();
   });
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
@@ -245,20 +211,8 @@ void HomeActivity::loop() {
   }
 }
 
-void HomeActivity::displayTaskLoop() {
-  while (true) {
-    if (updateRequired) {
-      updateRequired = false;
-      xSemaphoreTake(renderingMutex, portMAX_DELAY);
-      render();
-      xSemaphoreGive(renderingMutex);
-    }
-    vTaskDelay(10 / portTICK_PERIOD_MS);
-  }
-}
-
-void HomeActivity::render() {
-  auto metrics = UITheme::getInstance().getMetrics();
+void HomeActivity::render(Activity::RenderLock&&) {
+  const auto& metrics = UITheme::getInstance().getMetrics();
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
 
@@ -272,10 +226,14 @@ void HomeActivity::render() {
                           std::bind(&HomeActivity::storeCoverBuffer, this));
 
   // Build menu items dynamically
-  std::vector<const char*> menuItems = {TR(BROWSE_FILES), TR(TAB_RECENT), TR(FILE_TRANSFER), TR(SETTINGS_TITLE)};
+  std::vector<const char*> menuItems = {tr(STR_BROWSE_FILES), tr(STR_MENU_RECENT_BOOKS), tr(STR_FILE_TRANSFER),
+                                        tr(STR_SETTINGS_TITLE)};
+  std::vector<UIIcon> menuIcons = {Folder, Recent, Transfer, Settings};
+
   if (hasOpdsUrl) {
     // Insert OPDS Browser after My Library
-    menuItems.insert(menuItems.begin() + 2, "OPDS Browser");
+    menuItems.insert(menuItems.begin() + 2, tr(STR_OPDS_BROWSER));
+    menuIcons.insert(menuIcons.begin() + 2, Library);
   }
 
   GUI.drawButtonMenu(
@@ -284,23 +242,19 @@ void HomeActivity::render() {
            pageHeight - (metrics.headerHeight + metrics.homeTopPadding + metrics.verticalSpacing * 2 +
                          metrics.buttonHintsHeight)},
       static_cast<int>(menuItems.size()), selectorIndex - recentBooks.size(),
-      [&menuItems](int index) { return std::string(menuItems[index]); }, nullptr);
+      [&menuItems](int index) { return std::string(menuItems[index]); },
+      [&menuIcons](int index) { return menuIcons[index]; });
 
-  const auto labels = mappedInput.mapLabels("", TR(SELECT), TR(DIR_UP), TR(DIR_DOWN));
+  const auto labels = mappedInput.mapLabels("", tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();
 
   if (!firstRenderDone) {
     firstRenderDone = true;
-    updateRequired = true;
+    requestUpdate();
   } else if (!recentsLoaded && !recentsLoading) {
     recentsLoading = true;
-    // Free the cover buffer before thumbnail generation to reclaim up to
-    // 48 KB of heap.  The JPEG decoder + zip dictionary need ~36 KB and
-    // ESP32-C3 with CJK fonts has very tight heap.  The buffer will be
-    // re-allocated on the next render after covers are loaded.
-    freeCoverBuffer();
     loadRecentCovers(metrics.homeCoverHeight);
   }
 }

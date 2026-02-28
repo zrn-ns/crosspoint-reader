@@ -91,10 +91,10 @@ class ExternalFont {
   uint16_t _bytesPerChar = 0;
 
   // LRU cache - dynamically allocated on load(), freed on unload()
-  // 128 glyphs for CJK text rendering (~26KB per font when loaded).
+  // 128 glyphs for CJK text rendering (~34KB per font when loaded).
   // Memory is only allocated when an external font is actually used.
   static constexpr int CACHE_SIZE = 128;       // 128 glyphs
-  static constexpr int MAX_GLYPH_BYTES = 200;  // Max 200 bytes per glyph (enough for 33x39)
+  static constexpr int MAX_GLYPH_BYTES = 260;  // Max 260 bytes per glyph (e.g. up to 38x52)
 
   // Flag to mark cached "non-existent" glyphs (avoid repeated SD reads)
   static constexpr uint8_t GLYPH_NOT_FOUND_MARKER = 0xFE;

@@ -173,6 +173,11 @@ void SettingsActivity::toggleCurrentSetting() {
     }
     const uint8_t currentValue = SETTINGS.*(setting.valuePtr);
     SETTINGS.*(setting.valuePtr) = (currentValue + 1) % static_cast<uint8_t>(setting.enumValues.size());
+
+    // Apply dark mode change immediately (renderer needs explicit notification)
+    if (setting.nameId == StrId::STR_COLOR_MODE) {
+      renderer.setDarkMode(SETTINGS.colorMode == CrossPointSettings::COLOR_MODE::DARK_MODE);
+    }
   } else if (setting.type == SettingType::VALUE && setting.valuePtr != nullptr) {
     const int8_t currentValue = SETTINGS.*(setting.valuePtr);
     if (currentValue + setting.valueRange.step > setting.valueRange.max) {
@@ -229,6 +234,9 @@ void SettingsActivity::toggleCurrentSetting() {
         // Do nothing
         break;
     }
+    // ACTION types don't change settings values, skip saveToFile().
+    // Also avoids concurrent SD card access with the newly created render task.
+    return;
   } else {
     return;
   }

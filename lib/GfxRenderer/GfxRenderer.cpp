@@ -49,6 +49,7 @@ GfxRenderer::FontPrewarmScope::FontPrewarmScope(GfxRenderer& renderer) : rendere
   renderer_->clearFontCache();
   renderer_->resetFontStats();
   renderer_->scanText_.clear();
+  renderer_->scanText_.reserve(2048);  // Pre-allocate to avoid heap fragmentation from repeated concat
   memset(renderer_->scanStyleCounts_, 0, sizeof(renderer_->scanStyleCounts_));
   renderer_->scanFontId_ = -1;
 }
@@ -73,8 +74,8 @@ void GfxRenderer::FontPrewarmScope::endScanAndPrewarm() {
 
 GfxRenderer::FontPrewarmScope::~FontPrewarmScope() {
   if (active_) {
+    endScanAndPrewarm();  // no-op if already called (scanText_ is empty)
     renderer_->clearFontCache();
-    renderer_->scanMode_ = ScanMode::None;
   }
 }
 

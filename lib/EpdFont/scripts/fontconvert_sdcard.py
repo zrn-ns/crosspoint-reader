@@ -216,12 +216,15 @@ def extract_kerning_fonttools(font_path, codepoints, ppem):
     units_per_em = font['head'].unitsPerEm
     cmap = font.getBestCmap() or {}
 
-    # Build glyph_name -> codepoint map (only for requested codepoints)
-    glyph_to_cp = {}
+    # Build glyph_name -> [codepoints] map (preserves aliases where multiple
+    # codepoints share a glyph, e.g. space/nbsp)
+    glyph_to_cps = {}
     for cp in codepoints:
         gname = cmap.get(cp)
         if gname:
-            glyph_to_cp[gname] = cp
+            glyph_to_cps.setdefault(gname, []).append(cp)
+    # Flat dict for membership checks and subtable extraction (uses keys only)
+    glyph_to_cp = glyph_to_cps
 
     # Collect raw kerning values in font design units
     raw_kern = {}  # (left_glyph_name, right_glyph_name) -> design_units
@@ -255,14 +258,16 @@ def extract_kerning_fonttools(font_path, codepoints, ppem):
     font.close()
 
     # Scale design-unit kerning values to 4.4 fixed-point pixels.
+    # Expand glyph aliases: if multiple codepoints share a glyph, emit kern
+    # pairs for all codepoint combinations.
     scale = ppem / units_per_em
     result = {}  # (leftCp, rightCp) -> 4.4 fixed-point adjust
     for (lg, rg), du in raw_kern.items():
-        lcp = glyph_to_cp[lg]
-        rcp = glyph_to_cp[rg]
         adjust = fp4_from_design_units(du, scale)
         if adjust != 0:
-            result[(lcp, rcp)] = adjust
+            for lcp in glyph_to_cps[lg]:
+                for rcp in glyph_to_cps[rg]:
+                    result[(lcp, rcp)] = adjust
     return result
 
 
@@ -435,6 +440,8 @@ def extract_ligatures_fonttools(font_path, codepoints):
                   f"({', '.join(f'U+{cp:04X}' for cp in seq)}) -> U+{lig_cp:04X}: "
                   f"no intermediate ligature for prefix", file=sys.stderr)
 
+    # Sort by packed pair key — on-device lookup uses binary search
+    pairs.sort(key=lambda p: p[0])
     return pairs
 
 
@@ -699,10 +706,16 @@ def generate_cpfont_multistyle(style_fonts, size, intervals, output_path,
     toc_data = bytearray()
     for style_id in sorted(raster_data.keys()):
         sd = raster_data[style_id]
+        if sd.advanceY > 255:
+            print(f"ERROR: advanceY ({sd.advanceY}) exceeds uint8 range for "
+                  f"style {style_id} size {size}. This likely means the font "
+                  f"size is too large for this format.",
+                  file=sys.stderr)
+            sys.exit(1)
         toc_data += struct.pack(STYLE_TOC_FORMAT,
                                 style_id,
                                 len(sd.intervals), len(sd.all_glyphs),
-                                sd.advanceY & 0xFF, sd.ascender, sd.descender,
+                                sd.advanceY, sd.ascender, sd.descender,
                                 len(sd.kern_left_classes), len(sd.kern_right_classes),
                                 sd.kern_left_class_count, sd.kern_right_class_count,
                                 len(sd.ligature_pairs),

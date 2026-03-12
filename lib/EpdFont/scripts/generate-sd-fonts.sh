@@ -43,7 +43,7 @@ echo "[1/3] NotoSansExtended (Latin-ext + Greek + Cyrillic + Georgian + Armenian
 python3 "$SCRIPT" \
   "$FONT_DIR/NotoSans/NotoSans-Regular.ttf" \
   --intervals latin-ext,greek,cyrillic,georgian,armenian,ethiopic \
-  --sizes "$SIZES" --style regular --2bit \
+  --sizes "$SIZES" --style regular \
   --name NotoSansExtended \
   --output-dir "$OUTPUT_BASE/NotoSansExtended/" &
 PID_NOTO=$!
@@ -55,7 +55,7 @@ python3 "$SCRIPT" \
   --italic "$FONT_DIR/Bookerly/Bookerly-Italic.ttf" \
   --bolditalic "$FONT_DIR/Bookerly/Bookerly-BoldItalic.ttf" \
   --intervals builtin \
-  --sizes "$SIZES" --2bit --force-autohint \
+  --sizes "$SIZES" --force-autohint \
   --name Bookerly-SD \
   --output-dir "$OUTPUT_BASE/Bookerly-SD/" &
 PID_BOOKERLY=$!
@@ -64,7 +64,7 @@ echo "[3/3] NotoSansCJK (CJK + ASCII + Punctuation)"
 python3 "$SCRIPT" \
   "$FONT_DIR/NotoSansCJK/NotoSansCJKsc-Regular.otf" \
   --intervals ascii,latin1,punctuation,cjk \
-  --sizes "$SIZES" --style regular --2bit \
+  --sizes "$SIZES" --style regular \
   --name NotoSansCJK \
   --output-dir "$OUTPUT_BASE/NotoSansCJK/" &
 PID_CJK=$!

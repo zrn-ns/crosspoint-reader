@@ -138,7 +138,12 @@ bool SdCardFont::loadStyleKernLigatureData(PerStyle& s) {
       return false;
     }
 
-    file.seekSet(s.kernLeftFileOffset);
+    if (!file.seekSet(s.kernLeftFileOffset)) {
+      LOG_ERR("SDCF", "Failed to seek to kern data");
+      freeStyleKernLigatureData(s);
+      file.close();
+      return false;
+    }
     size_t leftSz = s.header.kernLeftEntryCount * sizeof(EpdKernClassEntry);
     size_t rightSz = s.header.kernRightEntryCount * sizeof(EpdKernClassEntry);
     if (file.read(reinterpret_cast<uint8_t*>(s.kernLeftClasses), leftSz) != static_cast<int>(leftSz) ||
@@ -159,7 +164,12 @@ bool SdCardFont::loadStyleKernLigatureData(PerStyle& s) {
       file.close();
       return false;
     }
-    file.seekSet(s.ligatureFileOffset);
+    if (!file.seekSet(s.ligatureFileOffset)) {
+      LOG_ERR("SDCF", "Failed to seek to ligature data");
+      freeStyleKernLigatureData(s);
+      file.close();
+      return false;
+    }
     size_t sz = s.header.ligaturePairCount * sizeof(EpdLigaturePair);
     if (file.read(reinterpret_cast<uint8_t*>(s.ligaturePairs), sz) != static_cast<int>(sz)) {
       LOG_ERR("SDCF", "Failed to read ligature pairs");
@@ -317,7 +327,12 @@ bool SdCardFont::load(const char* path) {
       return false;
     }
 
-    file.seekSet(s.intervalsFileOffset);
+    if (!file.seekSet(s.intervalsFileOffset)) {
+      LOG_ERR("SDCF", "Failed to seek to intervals for style %u", i);
+      file.close();
+      freeAll();
+      return false;
+    }
     size_t intervalsBytes = s.header.intervalCount * sizeof(EpdUnicodeInterval);
     if (file.read(reinterpret_cast<uint8_t*>(s.fullIntervals), intervalsBytes) != static_cast<int>(intervalsBytes)) {
       LOG_ERR("SDCF", "Failed to read intervals for style %u", i);

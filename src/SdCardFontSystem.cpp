@@ -38,6 +38,12 @@ void SdCardFontSystem::begin(GfxRenderer& renderer) {
 }
 
 void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer) {
+  // If the web server (or another task) installed/deleted fonts, re-discover.
+  if (registryDirty_.exchange(false, std::memory_order_acquire)) {
+    LOG_DBG("SDFS", "Registry dirty — re-discovering fonts");
+    registry_.discover();
+  }
+
   const char* wantedFamily = SETTINGS.sdFontFamilyName;
   const std::string& currentFamily = manager_.currentFamilyName();
 

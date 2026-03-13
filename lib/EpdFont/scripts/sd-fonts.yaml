@@ -253,4 +253,4 @@ families:
     intervals: tifinagh
     sizes: [12, 14, 16, 18]
     styles:
-      regular: {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/notosanstifinagh/NotoSansTifinagh%5Bwght%5D.ttf"}
+      regular: {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/notosanstifinagh/NotoSansTifinagh-Regular.ttf"}

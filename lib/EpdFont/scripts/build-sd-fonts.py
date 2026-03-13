@@ -20,7 +20,6 @@ Usage:
 """
 
 import argparse
-import os
 import shutil
 import subprocess
 import sys

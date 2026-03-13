@@ -14,6 +14,23 @@
 #   styles:      Map of style name -> font source
 #                  path: relative to lib/EpdFont (for committed fonts)
 #                  url:  download URL (for fonts not in the repo)
+#
+# Variable fonts:
+#   Some fonts (Bitter, Inter, Alegreya) are only distributed as variable
+#   fonts. freetype-py's FT_Set_Var_Design_Coordinates binding is broken —
+#   it doesn't actually change the rendered glyphs — so we can only use the
+#   default instance (Regular weight). These are listed as regular-only.
+#
+#   To add bold/italic support, use fonttools to extract static instances
+#   before passing to fontconvert_sdcard.py:
+#
+#     pip install fonttools
+#     fonttools instancer Bitter[wght].ttf wght=700 -o Bitter-Bold.ttf
+#     fonttools instancer Bitter-Italic[wght].ttf wght=400 -o Bitter-Italic.ttf
+#     fonttools instancer Bitter-Italic[wght].ttf wght=700 -o Bitter-BoldItalic.ttf
+#
+#   Then add a pre-processing step in build-sd-fonts.py to run these before
+#   generation, and update the styles below to use the extracted static files.
 
 families:
   # ── Serif ──────────────────────────────────────────────────────────────

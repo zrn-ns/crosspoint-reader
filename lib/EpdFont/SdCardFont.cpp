@@ -77,6 +77,7 @@ void SdCardFont::freeStyleAll(PerStyle& s) {
 
 void SdCardFont::freeAll() {
   clearOverflow();
+  clearAdvanceTables();
   for (uint8_t i = 0; i < MAX_STYLES; i++) {
     freeStyleAll(styles_[i]);
   }
@@ -697,11 +698,220 @@ int SdCardFont::prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint3
 
 void SdCardFont::clearCache() {
   clearOverflow();
+  clearAdvanceTables();
   for (uint8_t i = 0; i < MAX_STYLES; i++) {
     if (!styles_[i].present) continue;
     freeStyleMiniData(styles_[i]);
     applyGlyphMissCallback(i);
   }
+}
+
+// --- Advance table ---
+
+void SdCardFont::clearAdvanceTables() {
+  for (uint8_t i = 0; i < MAX_STYLES; i++) {
+    delete[] advanceTable_[i];
+    advanceTable_[i] = nullptr;
+    advanceTableSize_[i] = 0;
+  }
+}
+
+bool SdCardFont::hasAdvanceTable() const {
+  for (uint8_t i = 0; i < MAX_STYLES; i++) {
+    if (advanceTable_[i]) return true;
+  }
+  return false;
+}
+
+uint16_t SdCardFont::getAdvance(uint32_t codepoint, uint8_t style) const {
+  if (style >= MAX_STYLES || !advanceTable_[style]) return 0;
+  const AdvanceEntry* table = advanceTable_[style];
+  const uint32_t size = advanceTableSize_[style];
+  // Binary search sorted by codepoint
+  uint32_t lo = 0, hi = size;
+  while (lo < hi) {
+    uint32_t mid = lo + (hi - lo) / 2;
+    if (table[mid].codepoint < codepoint) {
+      lo = mid + 1;
+    } else {
+      hi = mid;
+    }
+  }
+  if (lo < size && table[lo].codepoint == codepoint) {
+    return table[lo].advanceX;
+  }
+  return 0;
+}
+
+int SdCardFont::buildAdvanceTable(const char* utf8Text, uint8_t styleMask) {
+  if (!loaded_) return -1;
+
+  clearAdvanceTables();
+
+  unsigned long startMs = millis();
+
+  // Step 1: Extract unique codepoints (no limit).
+  // First pass: count total codepoints to size the dedup buffer.
+  uint32_t totalChars = 0;
+  {
+    const unsigned char* p = reinterpret_cast<const unsigned char*>(utf8Text);
+    while (*p) {
+      utf8NextCodepoint(&p);
+      totalChars++;
+    }
+  }
+  if (totalChars == 0) return 0;
+
+  // Allocate buffer for unique codepoints. Worst case: every character is unique.
+  // For typical CJK text this is 2000-4000 entries × 4 bytes = 8-16KB, temporary.
+  uint32_t* codepoints = new (std::nothrow) uint32_t[totalChars];
+  if (!codepoints) {
+    LOG_ERR("SDCF", "buildAdvanceTable: failed to allocate codepoint buffer (%u bytes)", totalChars * 4);
+    return -1;
+  }
+  uint32_t cpCount = 0;
+
+  // Second pass: collect unique codepoints via O(n²) dedup.
+  // Bounded by uniqueCount × totalChars comparisons. For 2000 unique from 2291 total,
+  // worst case ~4.6M comparisons of uint32_t — ~30ms on 160MHz RISC-V, acceptable
+  // for one-time section indexing.
+  const unsigned char* p = reinterpret_cast<const unsigned char*>(utf8Text);
+  while (*p) {
+    uint32_t cp = utf8NextCodepoint(&p);
+    if (cp == 0) break;
+
+    bool found = false;
+    for (uint32_t i = 0; i < cpCount; i++) {
+      if (codepoints[i] == cp) {
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      codepoints[cpCount++] = cp;
+    }
+  }
+
+  // Sort for ordered glyph index mapping and final table output
+  std::sort(codepoints, codepoints + cpCount);
+
+  // Step 2: Build per-style advance tables
+  int totalMissed = 0;
+  for (uint8_t si = 0; si < MAX_STYLES; si++) {
+    if (!(styleMask & (1 << si)) || !styles_[si].present) continue;
+    const auto& s = styles_[si];
+
+    // Map codepoints to global glyph indices
+    struct CpIdx {
+      uint32_t codepoint;
+      int32_t glyphIndex;
+    };
+    CpIdx* mappings = new (std::nothrow) CpIdx[cpCount];
+    if (!mappings) {
+      LOG_ERR("SDCF", "buildAdvanceTable: failed to allocate mappings for style %u", si);
+      totalMissed += cpCount;
+      continue;
+    }
+
+    uint32_t validCount = 0;
+    for (uint32_t i = 0; i < cpCount; i++) {
+      int32_t idx = findGlobalGlyphIndex(s, codepoints[i]);
+      if (idx >= 0) {
+        mappings[validCount].codepoint = codepoints[i];
+        mappings[validCount].glyphIndex = idx;
+        validCount++;
+      }
+    }
+    totalMissed += static_cast<int>(cpCount - validCount);
+
+    if (validCount == 0) {
+      delete[] mappings;
+      continue;
+    }
+
+    // Allocate advance table
+    advanceTable_[si] = new (std::nothrow) AdvanceEntry[validCount];
+    if (!advanceTable_[si]) {
+      LOG_ERR("SDCF", "buildAdvanceTable: failed to allocate advance table (%u entries) for style %u", validCount, si);
+      delete[] mappings;
+      continue;
+    }
+    advanceTableSize_[si] = validCount;
+
+    // Copy codepoints into advance table (already sorted)
+    for (uint32_t i = 0; i < validCount; i++) {
+      advanceTable_[si][i].codepoint = mappings[i].codepoint;
+      advanceTable_[si][i].advanceX = 0;
+    }
+
+    // Sort mappings by glyph index for sequential SD reads
+    std::sort(mappings, mappings + validCount,
+              [](const CpIdx& a, const CpIdx& b) { return a.glyphIndex < b.glyphIndex; });
+
+    // Build a reverse map: for each mapping index, find its position in the
+    // sorted-by-codepoint advance table. Since both are small and this runs
+    // once per section build, O(n²) is acceptable.
+    std::unique_ptr<uint32_t[]> tablePos(new (std::nothrow) uint32_t[validCount]);
+    if (!tablePos) {
+      LOG_ERR("SDCF", "buildAdvanceTable: failed to allocate tablePos for style %u", si);
+      delete[] advanceTable_[si];
+      advanceTable_[si] = nullptr;
+      advanceTableSize_[si] = 0;
+      delete[] mappings;
+      continue;
+    }
+    for (uint32_t i = 0; i < validCount; i++) {
+      // Binary search the advance table (sorted by codepoint) for this mapping's codepoint
+      uint32_t lo = 0, hi = validCount;
+      while (lo < hi) {
+        uint32_t mid = lo + (hi - lo) / 2;
+        if (advanceTable_[si][mid].codepoint < mappings[i].codepoint) {
+          lo = mid + 1;
+        } else {
+          hi = mid;
+        }
+      }
+      tablePos[i] = lo;
+    }
+
+    // Open file once, read advanceX for each glyph in index order
+    FsFile file;
+    if (!Storage.openFileForRead("SDCF", filePath_, file)) {
+      LOG_ERR("SDCF", "buildAdvanceTable: failed to open .cpfont for style %u", si);
+      delete[] advanceTable_[si];
+      advanceTable_[si] = nullptr;
+      advanceTableSize_[si] = 0;
+      delete[] mappings;
+      continue;
+    }
+
+    EpdGlyph tempGlyph;
+    int32_t lastReadIndex = INT32_MIN;
+    for (uint32_t i = 0; i < validCount; i++) {
+      int32_t gIdx = mappings[i].glyphIndex;
+      uint32_t fileOff = s.glyphsFileOffset + static_cast<uint32_t>(gIdx) * sizeof(EpdGlyph);
+      if (gIdx != lastReadIndex + 1) {
+        file.seekSet(fileOff);
+      }
+      if (file.read(reinterpret_cast<uint8_t*>(&tempGlyph), sizeof(EpdGlyph)) != sizeof(EpdGlyph)) {
+        LOG_ERR("SDCF", "buildAdvanceTable: short glyph read (style %u, glyph %d)", si, gIdx);
+        break;
+      }
+      lastReadIndex = gIdx;
+      advanceTable_[si][tablePos[i]].advanceX = tempGlyph.advanceX;
+    }
+
+    file.close();
+    delete[] mappings;
+
+    LOG_DBG("SDCF", "Built advance table: style %u, %u entries, %u bytes", si, validCount,
+            validCount * static_cast<uint32_t>(sizeof(AdvanceEntry)));
+  }
+
+  delete[] codepoints;
+
+  stats_.prewarmTotalMs = millis() - startMs;
+  return totalMissed;
 }
 
 // --- Stats ---

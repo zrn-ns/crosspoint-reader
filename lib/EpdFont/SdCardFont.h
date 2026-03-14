@@ -25,6 +25,19 @@ class SdCardFont {
   // Returns number of glyphs that couldn't be loaded (0 on full success).
   int prewarm(const char* utf8Text, uint8_t styleMask = 0x0F, bool metadataOnly = false);
 
+  // Build a compact advance-only table for layout measurement.
+  // Extracts ALL unique codepoints from utf8Text (no MAX_PAGE_GLYPHS cap),
+  // batch-reads advanceX from SD, stores in a sorted per-style table.
+  // Returns number of codepoints not found in font coverage.
+  int buildAdvanceTable(const char* utf8Text, uint8_t styleMask = 0x0F);
+
+  // Look up advanceX for a codepoint from the advance table.
+  // Returns the 12.4 fixed-point advance, or 0 if not found.
+  uint16_t getAdvance(uint32_t codepoint, uint8_t style) const;
+
+  // Returns true if advance table is populated for at least one style.
+  bool hasAdvanceTable() const;
+
   // Free mini data for all styles, restore stub EpdFontData.
   void clearCache();
 
@@ -142,6 +155,16 @@ class SdCardFont {
   OverflowEntry overflow_[OVERFLOW_CAPACITY] = {};
   uint32_t overflowCount_ = 0;
   uint32_t overflowNext_ = 0;
+
+  // Compact advance-only table for layout measurement (per-style).
+  // Built by buildAdvanceTable(), queried by getAdvance().
+  struct AdvanceEntry {
+    uint32_t codepoint;
+    uint16_t advanceX;  // 12.4 fixed-point
+  };
+  AdvanceEntry* advanceTable_[MAX_STYLES] = {};
+  uint32_t advanceTableSize_[MAX_STYLES] = {};
+  void clearAdvanceTables();
 
   Stats stats_;
   uint32_t contentHash_ = 0;

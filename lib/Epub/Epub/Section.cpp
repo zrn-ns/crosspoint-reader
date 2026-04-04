@@ -11,8 +11,8 @@
 #include "parsers/ChapterHtmlSlimParser.h"
 
 namespace {
-// Bump version to 23: TableRowBlock with character-level cell wrapping.
-constexpr uint8_t SECTION_FILE_VERSION = 23;
+// Bump version to 25: hanging indent for <li> bullet items with minimum indent.
+constexpr uint8_t SECTION_FILE_VERSION = 25;
 // Minimum free heap required before attempting to build section pages.
 // Section building involves heavy allocations (Page, TextBlock, PageLine, etc.)
 // and on ESP32 without C++ exceptions, allocation failure calls abort().

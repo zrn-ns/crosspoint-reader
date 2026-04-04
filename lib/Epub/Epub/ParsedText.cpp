@@ -148,7 +148,8 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
 
   // CJK fallback: when firstLineIndent is ON but CSS doesn't define text-indent,
   // calculate a 2-character CJK indent width and inject it as textIndent for layout.
-  if (firstLineIndent && blockStyle.textIndent <= 0 &&
+  // Skip when textIndent is explicitly negative (hanging indent for <li> bullets).
+  if (firstLineIndent && blockStyle.textIndent == 0 && !blockStyle.textIndentDefined &&
       (blockStyle.alignment == CssTextAlign::Justify || blockStyle.alignment == CssTextAlign::Left)) {
     const int cjkCharWidth = renderer.getTextWidth(fontId, "\xe5\xad\x97", EpdFontFamily::REGULAR);
     blockStyle.textIndent = static_cast<int16_t>(cjkCharWidth > 0 ? cjkCharWidth * 2 : spaceWidth * 6);
@@ -208,9 +209,13 @@ std::vector<size_t> ParsedText::computeLineBreaks(const GfxRenderer& renderer, c
     return {};
   }
 
-  // Apply CSS text-indent when firstLineIndent is enabled (user toggle controls CSS indent)
+  // Compute first-line indent:
+  // - Hanging indent (negative textIndent + textIndentDefined): always applied (e.g. <li> bullet)
+  // - Positive first-line indent: requires user toggle (firstLineIndent)
+  const bool isHangingIndent = blockStyle.textIndentDefined && blockStyle.textIndent < 0;
+  const bool isFirstLineIndent = firstLineIndent && blockStyle.textIndent > 0;
   const int effectiveIndent =
-      firstLineIndent && blockStyle.textIndent > 0 &&
+      (isHangingIndent || isFirstLineIndent) &&
               (blockStyle.alignment == CssTextAlign::Justify || blockStyle.alignment == CssTextAlign::Left)
           ? blockStyle.textIndent
           : 0;
@@ -285,8 +290,10 @@ std::vector<size_t> ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& r
                                                             std::vector<uint16_t>& wordWidths,
                                                             std::vector<bool>& continuesVec,
                                                             std::vector<bool>& wordIsCjkVec) {
+  const bool isHangingIndent2 = blockStyle.textIndentDefined && blockStyle.textIndent < 0;
+  const bool isFirstLineIndent2 = firstLineIndent && blockStyle.textIndent > 0;
   const int effectiveIndent =
-      firstLineIndent && blockStyle.textIndent > 0 &&
+      (isHangingIndent2 || isFirstLineIndent2) &&
               (blockStyle.alignment == CssTextAlign::Justify || blockStyle.alignment == CssTextAlign::Left)
           ? blockStyle.textIndent
           : 0;
@@ -417,8 +424,10 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   const size_t lineWordCount = lineBreak - lastBreakAt;
 
   const bool isFirstLine = breakIndex == 0;
+  const bool isHangingIndent3 = blockStyle.textIndentDefined && blockStyle.textIndent < 0;
+  const bool isFirstLineIndent3 = firstLineIndent && blockStyle.textIndent > 0;
   const int effectiveIndent =
-      isFirstLine && firstLineIndent && blockStyle.textIndent > 0 &&
+      isFirstLine && (isHangingIndent3 || isFirstLineIndent3) &&
               (blockStyle.alignment == CssTextAlign::Justify || blockStyle.alignment == CssTextAlign::Left)
           ? blockStyle.textIndent
           : 0;
@@ -449,7 +458,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     justifiedSpacing = spareSpace / static_cast<int>(actualGapCount);
   }
 
-  auto xpos = static_cast<uint16_t>(effectiveIndent);
+  auto xpos = static_cast<int16_t>(effectiveIndent);
   if (blockStyle.alignment == CssTextAlign::Right) {
     xpos = spareSpace - static_cast<int>(nonCjkGapCount) * spaceWidth;
   } else if (blockStyle.alignment == CssTextAlign::Center) {

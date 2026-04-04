@@ -43,6 +43,7 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
 
   const int effectiveFontId = (blockStyle.fontId != 0) ? blockStyle.fontId : fontId;
 
+
   for (size_t i = 0; i < words.size(); i++) {
     const int wordX = wordXpos[i] + x;
     const EpdFontFamily::Style currentStyle = wordStyles[i];

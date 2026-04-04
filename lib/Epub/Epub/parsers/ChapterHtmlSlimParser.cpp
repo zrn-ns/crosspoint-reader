@@ -649,12 +649,29 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       self->startNewTextBlock(self->currentTextBlock->getBlockStyle());
     } else {
       self->currentCssStyle = cssStyle;
-      self->startNewTextBlock(userAlignmentBlockStyle);
-      self->updateEffectiveInlineStyle();
 
       if (strcmp(name, "li") == 0) {
-        self->currentTextBlock->getBlockStyle().isListItem = true;
+        // Force a fresh text block for <li> — the "merge with empty block" path
+        // in startNewTextBlock can lose our hanging indent settings.
+        if (self->currentTextBlock && self->currentTextBlock->isEmpty()) {
+          self->currentTextBlock.reset();
+        }
+        auto liBlockStyle = userAlignmentBlockStyle;
+        liBlockStyle.isListItem = true;
+        const int bulletW = self->renderer.getTextAdvanceX(self->fontId, "\xe2\x80\xa2", EpdFontFamily::REGULAR);
+        const int spaceW = self->renderer.getTextAdvanceX(self->fontId, " ", EpdFontFamily::REGULAR);
+        // Ensure a visually meaningful indent (at least half line height)
+        const int minIndent = self->renderer.getLineHeight(self->fontId) / 2;
+        const auto hangIndent = static_cast<int16_t>(std::max(bulletW + spaceW, minIndent));
+        liBlockStyle.paddingLeft = static_cast<int16_t>(liBlockStyle.paddingLeft + hangIndent);
+        liBlockStyle.textIndent = static_cast<int16_t>(-hangIndent);
+        liBlockStyle.textIndentDefined = true;
+        self->startNewTextBlock(liBlockStyle);
+        self->updateEffectiveInlineStyle();
         self->currentTextBlock->addWord("\xe2\x80\xa2", EpdFontFamily::REGULAR);
+      } else {
+        self->startNewTextBlock(userAlignmentBlockStyle);
+        self->updateEffectiveInlineStyle();
       }
     }
   } else if (matches(name, UNDERLINE_TAGS, NUM_UNDERLINE_TAGS)) {
@@ -1372,6 +1389,7 @@ void ChapterHtmlSlimParser::makePages() {
   const int horizontalInset = blockStyle.totalHorizontalInset();
   const uint16_t effectiveWidth =
       (horizontalInset < viewportWidth) ? static_cast<uint16_t>(viewportWidth - horizontalInset) : viewportWidth;
+
 
   const int layoutFontId = (blockStyle.fontId != 0) ? blockStyle.fontId : fontId;
   currentTextBlock->layoutAndExtractLines(

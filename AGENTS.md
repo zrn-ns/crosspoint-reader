@@ -1,11 +1,15 @@
 # AGENTS.md
 
-This file is for autonomous coding agents working in `crosspoint-reader-cjk`.
+This file is for autonomous coding agents working in `zrn-ns/crosspoint-reader` (personal fork).
 It captures practical commands, style conventions, and repo guardrails.
+
+For architecture details specific to this fork (font systems, fp4 fixed-point, upstream sync strategy), see the
+"個人フォーク固有ガイド" section at the bottom of `CLAUDE.md`.
 
 ## 1) Project Snapshot
 
-- Target: Xteink X4 firmware (ESP32-C3), PlatformIO + Arduino.
+- Target: Xteink X3/X4 firmware (ESP32-C3), PlatformIO + Arduino.
+- Base: crosspoint-reader v1.2.0 + PR #1392 (SD card fonts) + PR #875 (X3 support) + CJK fork.
 - Main language: C++ (plus Python utility/generator scripts).
 - Entry point: `src/main.cpp`.
 - CI baseline: format, static analysis, and build.

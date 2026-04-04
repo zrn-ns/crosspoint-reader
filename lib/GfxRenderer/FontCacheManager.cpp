@@ -14,8 +14,15 @@ void FontCacheManager::setFontDecompressor(FontDecompressor* d) { fontDecompress
 
 void FontCacheManager::clearCache() {
   if (fontDecompressor_) fontDecompressor_->clearCache();
+  // Deduplicate pointers: multiple fontIds may point to the same SdCardFont
+  // (e.g., virtual fontIds for scaled sizes). Clearing the same font twice
+  // would free already-released memory.
+  SdCardFont* lastCleared = nullptr;
   for (auto& [id, font] : sdCardFonts_) {
-    font->clearCache();
+    if (font != lastCleared) {
+      font->clearCache();
+      lastCleared = font;
+    }
   }
 }
 
@@ -47,15 +54,23 @@ void FontCacheManager::prewarmCache(int fontId, const char* utf8Text, uint8_t st
 
 void FontCacheManager::logStats(const char* label) {
   if (fontDecompressor_) fontDecompressor_->logStats(label);
+  SdCardFont* last = nullptr;
   for (auto& [id, font] : sdCardFonts_) {
-    font->logStats(label);
+    if (font != last) {
+      font->logStats(label);
+      last = font;
+    }
   }
 }
 
 void FontCacheManager::resetStats() {
   if (fontDecompressor_) fontDecompressor_->resetStats();
+  SdCardFont* last = nullptr;
   for (auto& [id, font] : sdCardFonts_) {
-    font->resetStats();
+    if (font != last) {
+      font->resetStats();
+      last = font;
+    }
   }
 }
 

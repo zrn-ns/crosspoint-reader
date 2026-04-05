@@ -770,21 +770,22 @@ int SdCardFont::buildAdvanceTable(const char* utf8Text, uint8_t styleMask) {
   }
   if (totalChars == 0) return 0;
 
-  // Allocate buffer for unique codepoints. Worst case: every character is unique.
-  // For typical CJK text this is 2000-4000 entries × 4 bytes = 8-16KB, temporary.
-  uint32_t* codepoints = new (std::nothrow) uint32_t[totalChars];
+  // Allocate buffer for unique codepoints.
+  // Cap at MAX_ADVANCE_CODEPOINTS to prevent OOM on large CJK sections.
+  // Codepoints beyond the cap are still renderable via onGlyphMiss(), just
+  // without a cached advance value (falls back to SD read).
+  static constexpr uint32_t MAX_ADVANCE_CODEPOINTS = 1024;
+  const uint32_t bufSize = (totalChars < MAX_ADVANCE_CODEPOINTS) ? totalChars : MAX_ADVANCE_CODEPOINTS;
+  uint32_t* codepoints = new (std::nothrow) uint32_t[bufSize];
   if (!codepoints) {
-    LOG_ERR("SDCF", "buildAdvanceTable: failed to allocate codepoint buffer (%u bytes)", totalChars * 4);
+    LOG_ERR("SDCF", "buildAdvanceTable: failed to allocate codepoint buffer (%u bytes)", bufSize * 4);
     return -1;
   }
   uint32_t cpCount = 0;
 
   // Second pass: collect unique codepoints via O(n²) dedup.
-  // Bounded by uniqueCount × totalChars comparisons. For 2000 unique from 2291 total,
-  // worst case ~4.6M comparisons of uint32_t — ~30ms on 160MHz RISC-V, acceptable
-  // for one-time section indexing.
   const unsigned char* p = reinterpret_cast<const unsigned char*>(utf8Text);
-  while (*p) {
+  while (*p && cpCount < bufSize) {
     uint32_t cp = utf8NextCodepoint(&p);
     if (cp == 0) break;
 

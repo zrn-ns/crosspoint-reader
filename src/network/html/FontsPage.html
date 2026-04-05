@@ -229,7 +229,7 @@
           loadFonts();
         } else {
           status.className = 'status-err';
-          status.textContent = data.error || 'Upload failed';
+          status.textContent = (data.error || 'Upload failed') + (data.debug ? ' | ' + JSON.stringify(data.debug) : '');
         }
       } catch (err) {
         status.className = 'status-err';

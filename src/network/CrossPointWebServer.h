@@ -121,6 +121,7 @@ class CrossPointWebServer {
     FsFile file;
     std::string familyName;
     std::string filePath;
+    std::string failReason;
     bool valid = false;
     size_t bytesWritten = 0;
     static constexpr size_t BUFFER_SIZE = 4096;

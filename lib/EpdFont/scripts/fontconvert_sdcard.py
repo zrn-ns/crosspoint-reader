@@ -622,8 +622,17 @@ def rasterize_font_style(fontfile, size, intervals, style_id=0, force_autohint=F
     vert_mappings = extract_vert_mappings(fontfile)
     vert_glyphs = []  # [(codepoint, GlyphProps, packed_bytes), ...]
 
+    # Render vert glyphs at a larger size so they fill more of the character
+    # cell. Positioning metrics (left/top) are scaled back to the original
+    # coordinate system so the C++ renderer places them correctly.
+    VERT_GLYPH_SCALE = 1.5
+
     if vert_mappings:
-        print(f"  [{style_label}] vert feature: {len(vert_mappings)} mappings found", file=sys.stderr)
+        print(f"  [{style_label}] vert feature: {len(vert_mappings)} mappings found (scale={VERT_GLYPH_SCALE}x)", file=sys.stderr)
+        # Temporarily set larger font size for vert rendering
+        vert_size = int(round(size * VERT_GLYPH_SCALE))
+        face.set_char_size(vert_size << 6, vert_size << 6, 150, 150)
+
         vert_bitmap_offset = 0
         for cp, sub_glyph_name in sorted(vert_mappings.items()):
             # Only include vert substitutes for codepoints in our glyph set
@@ -682,12 +691,14 @@ def rasterize_font_style(fontfile, size, intervals, style_id=0, force_autohint=F
                 pixels2b.append(px)
 
             packed = bytes(pixels2b)
+            # Scale left/top back to original coordinate system so positioning
+            # works correctly with the base font's ascender
             glyph = GlyphProps(
                 width=bitmap.width,
                 height=bitmap.rows,
                 advance_x=fp4_from_ft16_16(face.glyph.linearHoriAdvance),
-                left=face.glyph.bitmap_left,
-                top=face.glyph.bitmap_top,
+                left=round(face.glyph.bitmap_left / VERT_GLYPH_SCALE),
+                top=round(face.glyph.bitmap_top / VERT_GLYPH_SCALE),
                 data_length=len(packed),
                 data_offset=vert_bitmap_offset,
                 code_point=cp,
@@ -695,6 +706,8 @@ def rasterize_font_style(fontfile, size, intervals, style_id=0, force_autohint=F
             vert_bitmap_offset += len(packed)
             vert_glyphs.append((cp, glyph, packed))
 
+        # Restore original font size
+        face.set_char_size(size << 6, size << 6, 150, 150)
         print(f"  [{style_label}] vert feature: {len(vert_glyphs)} glyphs rendered", file=sys.stderr)
 
     return StyleRasterData(

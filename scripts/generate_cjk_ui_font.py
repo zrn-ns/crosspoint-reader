@@ -44,7 +44,12 @@ def get_unique_chars(text):
     return sorted(chars, key=ord)
 
 def load_font_fitting_cell(font_path, pixel_size):
-    """Load a font and shrink it until ascent+descent fits the cell height."""
+    """Load a font and shrink it until ascent fits the cell height.
+
+    Only ascent is required to fit; descent may be clipped at the bottom.
+    CJK glyphs rarely use descender space, so this keeps the visual size
+    consistent across font weights (e.g. Medium vs Bold).
+    """
     pt_size = max(1, int(pixel_size))
     while pt_size > 0:
         try:
@@ -53,7 +58,7 @@ def load_font_fitting_cell(font_path, pixel_size):
             print(f"Error loading font: {e}")
             return None, None, None, None
         ascent, descent = font.getmetrics()
-        if ascent + descent <= pixel_size:
+        if ascent <= pixel_size:
             return font, pt_size, ascent, descent
         pt_size -= 1
     return None, None, None, None
@@ -142,7 +147,7 @@ def generate_font_header(font_path, pixel_size, output_path):
     with open(output_path, 'w') as f:
         f.write(f'''/**
  * Auto-generated CJK UI font data (optimized - UI characters only)
- * Font: 思源黑体-Medium
+ * Font: (see --font argument)
  * Size: {pt_size}pt
  * Dimensions: {pixel_size}x{pixel_size}
  * Characters: {len(chars)}

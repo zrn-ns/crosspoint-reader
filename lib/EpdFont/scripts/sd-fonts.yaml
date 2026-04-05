@@ -199,37 +199,16 @@ families:
       italic:     {url: "https://raw.githubusercontent.com/googlefonts/atkinson-hyperlegible-next/main/fonts/ttf/AtkinsonHyperlegibleNext-Italic.ttf"}
       bolditalic: {url: "https://raw.githubusercontent.com/googlefonts/atkinson-hyperlegible-next/main/fonts/ttf/AtkinsonHyperlegibleNext-BoldItalic.ttf"}
 
-  # ── CJK & Hangul ──────────────────────────────────────────────────────
+  # ── Japanese ─────────────────────────────────────────────────────────
 
-  - name: NotoSansCJK
-    description: "Sans-serif (Chinese, Japanese, Korean)"
-    intervals: ascii,latin1,punctuation,cjk
-    sizes: [12, 14, 16, 18]
-    styles:
-      regular: {url: "https://github.com/notofonts/noto-cjk/raw/main/Sans/OTF/SimplifiedChinese/NotoSansCJKsc-Regular.otf"}
-      bold:    {url: "https://github.com/notofonts/noto-cjk/raw/main/Sans/OTF/SimplifiedChinese/NotoSansCJKsc-Bold.otf"}
-
-  - name: NotoSansJpRegularOnly
-    description: "Sans-serif Japanese (Regular only, JIS X 0213)"
+  - name: NotoSansJp
+    description: "Sans-serif Japanese (JIS X 0213)"
     intervals: ascii,latin1,punctuation,cjk
     codepoints_file: codepoints/japanese_jis0213.txt
-    sizes: [14]
+    sizes: [12, 14, 16, 18]
     styles:
       regular: {url: "https://github.com/notofonts/noto-cjk/raw/main/Sans/OTF/Japanese/NotoSansCJKjp-Regular.otf"}
-
-  - name: NotoSerifCJK
-    description: "Serif (Chinese, Japanese, Korean)"
-    intervals: ascii,latin1,punctuation,cjk
-    sizes: [12, 14, 16, 18]
-    styles:
-      regular: {url: "https://github.com/notofonts/noto-cjk/raw/main/Serif/OTF/SimplifiedChinese/NotoSerifCJKsc-Regular.otf"}
-
-  - name: NotoSansHangul
-    description: "Sans-serif (Korean Hangul)"
-    intervals: ascii,latin1,punctuation,hangul
-    sizes: [12, 14, 16, 18]
-    styles:
-      regular: {url: "https://github.com/notofonts/noto-cjk/raw/main/Sans/OTF/Korean/NotoSansCJKkr-Regular.otf"}
+      bold:    {url: "https://github.com/notofonts/noto-cjk/raw/main/Sans/OTF/Japanese/NotoSansCJKjp-Bold.otf"}
 
   # ── Additional scripts (no complex shaping needed) ─────────────────────
 

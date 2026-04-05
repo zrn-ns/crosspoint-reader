@@ -1696,10 +1696,12 @@ void GfxRenderer::drawTextVertical(const int fontId, const int x, const int y, c
     }
 
     if (vertGlyph && vertBitmap && vertGlyph->width > 0 && vertGlyph->height > 0) {
-      // Render vert substitute glyph directly (always 2-bit for SD card fonts)
-      const int drawX = x + vertGlyph->left;
-      const int drawY = yPos + ascender - vertGlyph->top;
-      const int vAdvance = fp4::toPixel(vertGlyph->advanceX);
+      // Render vert substitute glyph centered in the full-width cell.
+      // The vert glyph's left/top are horizontal-origin-based metrics, which
+      // place punctuation at the cell edge (e.g. 。at right side). Center
+      // horizontally instead for a balanced vertical column appearance.
+      const int drawX = x + (advance - vertGlyph->width) / 2;
+      const int drawY = yPos + (advance - vertGlyph->height) / 2;
 
       int pixelPosition = 0;
       for (int glyphY = 0; glyphY < vertGlyph->height; glyphY++) {

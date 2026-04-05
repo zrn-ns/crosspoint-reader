@@ -1656,6 +1656,19 @@ void GfxRenderer::drawTextVertical(const int fontId, const int x, const int y, c
   }
 
   const auto& font = fontMap.at(effectiveFontId);
+  const int ascender = font.getData(style)->ascender;
+
+  // Check if this is an SD card font with vert data.
+  // Lazy-load vert section on first vertical render (avoids changing prewarm API).
+  SdCardFont* sdFont = nullptr;
+  auto sdIt = sdCardFonts_.find(effectiveFontId);
+  if (sdIt != sdCardFonts_.end()) {
+    sdFont = sdIt->second;
+    if (sdFont && sdFont->hasVertData()) {
+      sdFont->loadVertData(static_cast<uint8_t>(style));
+    }
+  }
+
   int yPos = y;
   const char* ptr = text;
 
@@ -1667,27 +1680,59 @@ void GfxRenderer::drawTextVertical(const int fontId, const int x, const int y, c
     if (!glyph) continue;
 
     const int advance = fp4::toPixel(glyph->advanceX);
-    // Add 10% vertical spacing between characters (equivalent to line spacing in horizontal mode)
     const int verticalAdvance = advance + advance / 10;
-    const auto* punctOffset = VerticalTextUtils::getVerticalPunctuationOffset(cp);
 
-    // Re-encode codepoint to UTF-8 for single-char drawing
-    char charBuf[5] = {};
-    if (cp < 0x80) {
-      charBuf[0] = static_cast<char>(cp);
-    } else if (cp < 0x800) {
-      charBuf[0] = static_cast<char>(0xC0 | (cp >> 6));
-      charBuf[1] = static_cast<char>(0x80 | (cp & 0x3F));
-    } else if (cp < 0x10000) {
-      charBuf[0] = static_cast<char>(0xE0 | (cp >> 12));
-      charBuf[1] = static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
-      charBuf[2] = static_cast<char>(0x80 | (cp & 0x3F));
+    // Check for vertical substitute glyph (OpenType 'vert' feature)
+    const EpdGlyph* vertGlyph = nullptr;
+    const uint8_t* vertBitmap = nullptr;
+    if (sdFont) {
+      vertGlyph = sdFont->getVertGlyph(cp, static_cast<uint8_t>(style));
+      if (vertGlyph) {
+        vertBitmap = sdFont->getVertBitmap(vertGlyph, static_cast<uint8_t>(style));
+      }
     }
 
-    // All characters drawn upright for now.
-    // TODO: Use OpenType 'vert' feature for proper vertical glyph variants
-    drawText(effectiveFontId, x, yPos, charBuf, black, style);
-    yPos += verticalAdvance;
+    if (vertGlyph && vertBitmap && vertGlyph->width > 0 && vertGlyph->height > 0) {
+      // Render vert substitute glyph directly (always 2-bit for SD card fonts)
+      const int drawX = x + vertGlyph->left;
+      const int drawY = yPos + ascender - vertGlyph->top;
+      const int vAdvance = fp4::toPixel(vertGlyph->advanceX);
+
+      int pixelPosition = 0;
+      for (int glyphY = 0; glyphY < vertGlyph->height; glyphY++) {
+        const int screenY = drawY + glyphY;
+        for (int glyphX = 0; glyphX < vertGlyph->width; glyphX++, pixelPosition++) {
+          const int screenX = drawX + glyphX;
+          const uint8_t byte = vertBitmap[pixelPosition >> 2];
+          const uint8_t bit_index = (3 - (pixelPosition & 3)) * 2;
+          const uint8_t bmpVal = 3 - ((byte >> bit_index) & 0x3);
+
+          if (renderMode == BW && bmpVal < 3) {
+            drawPixel(screenX, screenY, black);
+          } else if (renderMode == GRAYSCALE_MSB && (bmpVal == 1 || bmpVal == 2)) {
+            drawPixel(screenX, screenY, false);
+          } else if (renderMode == GRAYSCALE_LSB && bmpVal == 1) {
+            drawPixel(screenX, screenY, false);
+          }
+        }
+      }
+      yPos += vAdvance + vAdvance / 10;
+    } else {
+      // Fall back to upright rendering via drawText
+      char charBuf[5] = {};
+      if (cp < 0x80) {
+        charBuf[0] = static_cast<char>(cp);
+      } else if (cp < 0x800) {
+        charBuf[0] = static_cast<char>(0xC0 | (cp >> 6));
+        charBuf[1] = static_cast<char>(0x80 | (cp & 0x3F));
+      } else if (cp < 0x10000) {
+        charBuf[0] = static_cast<char>(0xE0 | (cp >> 12));
+        charBuf[1] = static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+        charBuf[2] = static_cast<char>(0x80 | (cp & 0x3F));
+      }
+      drawText(effectiveFontId, x, yPos, charBuf, black, style);
+      yPos += verticalAdvance;
+    }
   }
 }
 

@@ -116,6 +116,7 @@ class CrossPointSettings {
     BOOK_STYLE = 4,
     PARAGRAPH_ALIGNMENT_COUNT
   };
+  enum WRITING_MODE : uint8_t { WM_AUTO = 0, WM_HORIZONTAL = 1, WM_VERTICAL = 2, WRITING_MODE_COUNT };
 
   // Auto-sleep timeout options (in minutes)
   enum SLEEP_TIMEOUT {
@@ -188,6 +189,7 @@ class CrossPointSettings {
   uint8_t fontSize = MEDIUM;
   uint8_t lineSpacing = LINE_SPACING_DEFAULT;
   uint8_t paragraphAlignment = JUSTIFIED;
+  uint8_t writingMode = WM_AUTO;
   // Auto-sleep timeout setting (default 10 minutes)
   uint8_t sleepTimeout = SLEEP_10_MIN;
   // E-ink refresh frequency (default 15 pages)

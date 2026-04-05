@@ -355,6 +355,11 @@ STR_CALIBRE_FAILED_CREATE_FILE: "Failed to create file"
 STR_CALIBRE_PASSWORD_REQUIRED: "Password required"
 STR_CALIBRE_TRANSFER_INTERRUPTED: "Transfer interrupted"
 
+STR_WRITING_MODE: "Writing Mode"
+STR_WM_AUTO: "Auto"
+STR_WM_HORIZONTAL: "Horizontal"
+STR_WM_VERTICAL: "Vertical"
+
 STR_STATUS_BAR: "Status Bar"
 STR_FRONT_BTN_LAYOUT: "Front Button Layout"
 STR_FRONT_LAYOUT_BCLR: "Back, Confirm, Left, Right"

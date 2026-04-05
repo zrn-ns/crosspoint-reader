@@ -151,6 +151,9 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                         "imageRendering", StrId::STR_CAT_READER),
       SettingInfo::Toggle(StrId::STR_FIRST_LINE_INDENT, &CrossPointSettings::firstLineIndent, "firstLineIndent",
                           StrId::STR_CAT_READER),
+      SettingInfo::Enum(StrId::STR_WRITING_MODE, &CrossPointSettings::writingMode,
+                        {StrId::STR_WM_AUTO, StrId::STR_WM_HORIZONTAL, StrId::STR_WM_VERTICAL}, "writingMode",
+                        StrId::STR_CAT_READER),
       SettingInfo::Toggle(StrId::STR_INVERT_IMAGES, &CrossPointSettings::invertImages, "invertImages",
                           StrId::STR_CAT_READER),
 

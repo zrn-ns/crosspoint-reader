@@ -179,6 +179,110 @@ def load_glyph(code_point):
         face_index += 1
     return None
 
+def render_glyph_bitmap(bitmap, is2Bit):
+    """Convert a FreeType bitmap to packed pixel bytes (2-bit or 1-bit)."""
+    # Build out 4-bit greyscale bitmap
+    pixels4g = []
+    px = 0
+    for i, v in enumerate(bitmap.buffer):
+        y = i / bitmap.width
+        x = i % bitmap.width
+        if x % 2 == 0:
+            px = (v >> 4)
+        else:
+            px = px | (v & 0xF0)
+            pixels4g.append(px);
+            px = 0
+        # eol
+        if x == bitmap.width - 1 and bitmap.width % 2 > 0:
+            pixels4g.append(px)
+            px = 0
+
+    if is2Bit:
+        # 0-3 white, 4-7 light grey, 8-11 dark grey, 12-15 black
+        # Downsample to 2-bit bitmap
+        pixels2b = []
+        px = 0
+        pitch = (bitmap.width // 2) + (bitmap.width % 2)
+        for y in range(bitmap.rows):
+            for x in range(bitmap.width):
+                px = px << 2
+                bm = pixels4g[y * pitch + (x // 2)]
+                bm = (bm >> ((x % 2) * 4)) & 0xF
+
+                if bm >= 12:
+                    px += 3
+                elif bm >= 8:
+                    px += 2
+                elif bm >= 4:
+                    px += 1
+
+                if (y * bitmap.width + x) % 4 == 3:
+                    pixels2b.append(px)
+                    px = 0
+        if (bitmap.width * bitmap.rows) % 4 != 0:
+            px = px << (4 - (bitmap.width * bitmap.rows) % 4) * 2
+            pixels2b.append(px)
+        pixels = pixels2b
+    else:
+        # Downsample to 1-bit bitmap - treat any 2+ as black
+        pixelsbw = []
+        px = 0
+        pitch = (bitmap.width // 2) + (bitmap.width % 2)
+        for y in range(bitmap.rows):
+            for x in range(bitmap.width):
+                px = px << 1
+                bm = pixels4g[y * pitch + (x // 2)]
+                px += 1 if ((x & 1) == 0 and bm & 0xE > 0) or ((x & 1) == 1 and bm & 0xE0 > 0) else 0
+
+                if (y * bitmap.width + x) % 8 == 7:
+                    pixelsbw.append(px)
+                    px = 0
+        if (bitmap.width * bitmap.rows) % 8 != 0:
+            px = px << (8 - (bitmap.width * bitmap.rows) % 8)
+            pixelsbw.append(px)
+        pixels = pixelsbw
+
+    return bytes(pixels)
+
+def extract_vert_mappings(font_paths):
+    """Extract codepoint -> substitute glyph name from OpenType 'vert' feature."""
+    for path in font_paths:
+        try:
+            tt = TTFont(path)
+        except Exception:
+            continue
+        if 'GSUB' not in tt:
+            tt.close()
+            continue
+        gsub = tt['GSUB'].table
+        cmap = tt.getBestCmap()
+        if not cmap:
+            tt.close()
+            continue
+        # Reverse cmap: glyph_name -> codepoint
+        name_to_cp = {}
+        for cp_val, glyph_name in cmap.items():
+            name_to_cp[glyph_name] = cp_val
+
+        vert_map = {}  # orig_glyph_name -> sub_glyph_name
+        for feature_rec in gsub.FeatureList.FeatureRecord:
+            if feature_rec.FeatureTag == 'vert':
+                for lookup_idx in feature_rec.Feature.LookupListIndex:
+                    lookup = gsub.LookupList.Lookup[lookup_idx]
+                    for subtable in lookup.SubTable:
+                        if hasattr(subtable, 'mapping'):
+                            vert_map.update(subtable.mapping)
+
+        result = {}
+        for orig_name, sub_name in vert_map.items():
+            if orig_name in name_to_cp:
+                result[name_to_cp[orig_name]] = sub_name
+        tt.close()
+        if result:
+            return result
+    return {}
+
 unmerged_intervals = sorted(intervals + add_ints)
 intervals = []
 unvalidated_intervals = []
@@ -210,90 +314,7 @@ for i_start, i_end in intervals:
         face = load_glyph(code_point)
         bitmap = face.glyph.bitmap
 
-        # Build out 4-bit greyscale bitmap
-        pixels4g = []
-        px = 0
-        for i, v in enumerate(bitmap.buffer):
-            y = i / bitmap.width
-            x = i % bitmap.width
-            if x % 2 == 0:
-                px = (v >> 4)
-            else:
-                px = px | (v & 0xF0)
-                pixels4g.append(px);
-                px = 0
-            # eol
-            if x == bitmap.width - 1 and bitmap.width % 2 > 0:
-                pixels4g.append(px)
-                px = 0
-
-        if is2Bit:
-            # 0-3 white, 4-7 light grey, 8-11 dark grey, 12-15 black
-            # Downsample to 2-bit bitmap
-            pixels2b = []
-            px = 0
-            pitch = (bitmap.width // 2) + (bitmap.width % 2)
-            for y in range(bitmap.rows):
-                for x in range(bitmap.width):
-                    px = px << 2
-                    bm = pixels4g[y * pitch + (x // 2)]
-                    bm = (bm >> ((x % 2) * 4)) & 0xF
-
-                    if bm >= 12:
-                        px += 3
-                    elif bm >= 8:
-                        px += 2
-                    elif bm >= 4:
-                        px += 1
-
-                    if (y * bitmap.width + x) % 4 == 3:
-                        pixels2b.append(px)
-                        px = 0
-            if (bitmap.width * bitmap.rows) % 4 != 0:
-                px = px << (4 - (bitmap.width * bitmap.rows) % 4) * 2
-                pixels2b.append(px)
-
-            # for y in range(bitmap.rows):
-            #     line = ''
-            #     for x in range(bitmap.width):
-            #         pixelPosition = y * bitmap.width + x
-            #         byte = pixels2b[pixelPosition // 4]
-            #         bit_index = (3 - (pixelPosition % 4)) * 2
-            #         line += '#' if ((byte >> bit_index) & 3) > 0 else '.'
-            #     print(line)
-            # print('')
-        else:
-            # Downsample to 1-bit bitmap - treat any 2+ as black
-            pixelsbw = []
-            px = 0
-            pitch = (bitmap.width // 2) + (bitmap.width % 2)
-            for y in range(bitmap.rows):
-                for x in range(bitmap.width):
-                    px = px << 1
-                    bm = pixels4g[y * pitch + (x // 2)]
-                    px += 1 if ((x & 1) == 0 and bm & 0xE > 0) or ((x & 1) == 1 and bm & 0xE0 > 0) else 0
-
-                    if (y * bitmap.width + x) % 8 == 7:
-                        pixelsbw.append(px)
-                        px = 0
-            if (bitmap.width * bitmap.rows) % 8 != 0:
-                px = px << (8 - (bitmap.width * bitmap.rows) % 8)
-                pixelsbw.append(px)
-
-            # for y in range(bitmap.rows):
-            #     line = ''
-            #     for x in range(bitmap.width):
-            #         pixelPosition = y * bitmap.width + x
-            #         byte = pixelsbw[pixelPosition // 8]
-            #         bit_index = 7 - (pixelPosition % 8)
-            #         line += '#' if (byte >> bit_index) & 1 else '.'
-            #     print(line)
-            # print('')
-
-        pixels = pixels2b if is2Bit else pixelsbw
-
-        # Build output data
-        packed = bytes(pixels)
+        packed = render_glyph_bitmap(bitmap, is2Bit)
         glyph = GlyphProps(
             width = bitmap.width,
             height = bitmap.rows,
@@ -308,6 +329,44 @@ for i_start, i_end in intervals:
         )
         total_size += len(packed)
         all_glyphs.append((glyph, packed))
+
+# --- Vertical glyph substitution extraction ---
+vert_mappings = extract_vert_mappings(args.fontstack)
+vert_glyphs = []  # List of (codepoint, GlyphProps, packed_bytes)
+
+if vert_mappings:
+    print(f"  vert feature: {len(vert_mappings)} mappings found", file=sys.stderr)
+
+    for cp, sub_glyph_name in sorted(vert_mappings.items()):
+        # Try to load the substitute glyph by glyph index
+        rendered = False
+        for face in font_stack:
+            # Get glyph index by name
+            glyph_idx = face.get_name_index(sub_glyph_name.encode('ascii', 'replace'))
+            if glyph_idx == 0:
+                continue
+            face.load_glyph(glyph_idx, load_flags)
+            bitmap = face.glyph.bitmap
+            if bitmap.width == 0 or bitmap.rows == 0:
+                continue
+            packed = render_glyph_bitmap(bitmap, is2Bit)
+            glyph = GlyphProps(
+                width=bitmap.width,
+                height=bitmap.rows,
+                advance_x=fp4_from_ft16_16(face.glyph.linearHoriAdvance),
+                left=face.glyph.bitmap_left,
+                top=face.glyph.bitmap_top,
+                data_length=len(packed),
+                data_offset=0,  # Set during output
+                code_point=cp,
+            )
+            vert_glyphs.append((cp, glyph, packed))
+            rendered = True
+            break
+
+    print(f"  vert feature: {len(vert_glyphs)} glyphs rendered", file=sys.stderr)
+else:
+    print("  vert feature: no mappings found", file=sys.stderr)
 
 # pipe seems to be a good heuristic for the "real" descender
 face = load_glyph(ord('|'))
@@ -882,6 +941,33 @@ if ligature_pairs:
         print(f"    {{ 0x{packed_pair:08X}, 0x{lig_cp:04X} }}, // {cp_label(packed_pair >> 16)} {cp_label(packed_pair & 0xFFFF)} -> {cp_label(lig_cp)}")
     print("};\n")
 
+if vert_glyphs:
+    # Build vert bitmap data with correct offsets
+    vert_bitmap_data = []
+    vert_glyph_props = []
+    vert_offset = 0
+    for cp, glyph, packed in vert_glyphs:
+        vert_bitmap_data.extend(packed)
+        vert_glyph_props.append(glyph._replace(data_offset=vert_offset))
+        vert_offset += len(packed)
+
+    # Vert codepoints array (sorted, for binary search)
+    print(f"static const uint32_t {font_name}VertCodepoints[] = {{")
+    print("    " + ", ".join(f"0x{cp:04X}" for cp, _, _ in vert_glyphs))
+    print("};\n")
+
+    # Vert glyphs array
+    print(f"static const EpdGlyph {font_name}VertGlyphs[] = {{")
+    for g in vert_glyph_props:
+        print(f"    {{ {g.width}, {g.height}, {g.advance_x}, {g.left}, {g.top}, {g.data_length}, {g.data_offset} }},")
+    print("};\n")
+
+    # Vert bitmap data
+    print(f"static const uint8_t {font_name}VertBitmaps[{len(vert_bitmap_data)}] = {{")
+    for c in chunks(vert_bitmap_data, 16):
+        print("    " + " ".join(f"0x{b:02X}," for b in c))
+    print("};\n")
+
 print(f"static const EpdFontData {font_name} = {{")
 print(f"    {font_name}Bitmaps,")
 print(f"    {font_name}Glyphs,")
@@ -921,4 +1007,11 @@ if ligature_pairs:
 else:
     print(f"    nullptr,")
     print(f"    0,")
+if vert_glyphs:
+    print(f"    {font_name}VertCodepoints,")
+    print(f"    {font_name}VertGlyphs,")
+    print(f"    {font_name}VertBitmaps,")
+    print(f"    {len(vert_glyphs)},  // vertCount")
+else:
+    print("    nullptr, nullptr, nullptr, 0,  // no vert data")
 print("};")

@@ -8,8 +8,15 @@ Usage:
 """
 
 import argparse
+import glob
 import sys
 from pathlib import Path
+
+try:
+    import yaml
+except ImportError:
+    print("Error: PyYAML not installed. Run: pip3 install PyYAML")
+    sys.exit(1)
 
 try:
     from PIL import Image, ImageDraw, ImageFont
@@ -17,11 +24,12 @@ except ImportError:
     print("Error: PIL/Pillow not installed. Run: pip3 install Pillow")
     sys.exit(1)
 
-# UI characters needed (extracted from I18n strings + common punctuation)
-UI_CHARS = """
-!%&()*+,-./0123456789:;<=>?@，。！、：；？""''「」『』【】〈〉《》〔〕…—―─·•
+# Base UI characters: ASCII, punctuation, kana
+# CJK characters are auto-extracted from translation YAML files at build time
+BASE_UI_CHARS = """
+!%&()*+,-./0123456789:;<=>?@，。！、：；？""''「」『』【】〈〉《》〔〕…—―─·•（）«»
 ABCDEFGHIJKLMNOPQRSTUVWXYZ[]{}_
-abcdefghijklmnopqrstuvwxyz|«»
+abcdefghijklmnopqrstuvwxyz|
 あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをん
 がぎぐげござじずぜぞだぢづでどばびぶべぼぱぴぷぺぽ
 ぁぃぅぇぉっゃゅょゔ
@@ -29,19 +37,34 @@ abcdefghijklmnopqrstuvwxyz|«»
 ガギグゲゴザジズゼゾダヂヅデドバビブベボパピプペポ
 ァィゥェォッャュョヴヵヶー
 一二三四五六七八九十百千万亿
-简体中文日本語启动休眠进入浏览件传输设置书库继续阅读无打开的籍从下方始未找到选择章节已末空索引内存错误页面加载超出范围失败卡网络个扫描连接时忘记保密码删除按确定重新任意键左右认式创建热点现有供他人模将备此在器或用手机维线地址作为检查字正搜等待指令试断收更多容需要显示控制系统屏幕封状态栏隐藏电量百分比段落额外间距抗锯齿源短向前钮布局侧边长跳转大小行母数汉颜色对齐符刷频率同步语言壁纸清理缓户名服务档匹配证请先凭据成功就绪完这所度丢当再次项看串口了解详情深浅自义适应裁剪整不终忽略翻竖横顺针倒逆返回上特紧凑常宽松两端居钟版可是最禁条目命获取订析退主切换消否关写起動覧転送設続読開書見選択終込範囲敗削押確認法参既暗号化済力検機試受信必画隠追間隔電側長漢余白時頻期紙去証初報利能進捗項詳細無視縦計反戻狭普通広両揃え央現部蔵効題得替決
-远程本应置账户配来自
-リモートローカルセクションアップロード元
-仅付位修光典刻含哈埋复射嵌希提映样滤界移算经缩褪计过近適镜阳题首（）
-並享介伺佈佔使來個傳像儲內全兩共列刪割占各合啟图圍圖埠場增太套如安寫寬將尋對尾展帳并序庫張役從復快总恢態憑憶應截戶扩拡持挡掃排掛插換擇擋操擴數料斷标案桌條標樣橫檔檢每注淺添湊濾瀏為熱片狀畫當直相碼稱立第節粗結統經網緊緒線縮總繼續细者脚腳表装裝覽訂記註誤請證讀資足路載輸轉這連逾遠遺邊針鈕鋸錯鍵鎖鏡鐘链锁閱關陽隱雜非靠頁順預額顏顯预驟骤體鬆默點齊齒
 """
 
-# Extract unique characters
-def get_unique_chars(text):
+
+def extract_chars_from_translations(translations_dir):
+    """Extract all unique non-ASCII characters from translation YAML files."""
     chars = set()
-    for c in text:
+    for path in sorted(glob.glob(str(Path(translations_dir) / "*.yaml"))):
+        with open(path, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+        for key, value in data.items():
+            if key.startswith("_"):
+                continue
+            for c in str(value):
+                if ord(c) >= 0x80:
+                    chars.add(c)
+    return chars
+
+
+# Extract unique characters
+def get_unique_chars(base_text, translations_dir=None):
+    chars = set()
+    for c in base_text:
         if c.strip() and ord(c) >= 0x20:
             chars.add(c)
+    if translations_dir:
+        i18n_chars = extract_chars_from_translations(translations_dir)
+        chars.update(i18n_chars)
+        print(f"  Extracted {len(i18n_chars)} characters from translations")
     return sorted(chars, key=ord)
 
 def load_font_fitting_cell(font_path, pixel_size):
@@ -64,14 +87,14 @@ def load_font_fitting_cell(font_path, pixel_size):
         pt_size -= 1
     return None, None, None, None
 
-def generate_font_header(font_path, pixel_size, output_path):
+def generate_font_header(font_path, pixel_size, output_path, translations_dir=None):
     """Generate CJK UI font header file."""
 
     font, pt_size, ascent, descent = load_font_fitting_cell(font_path, pixel_size)
     if font is None:
         return False
 
-    chars = get_unique_chars(UI_CHARS)
+    chars = get_unique_chars(BASE_UI_CHARS, translations_dir)
     print(f"Generating {pixel_size}x{pixel_size} font with {len(chars)} characters...")
 
     # Collect glyph data
@@ -255,8 +278,10 @@ inline uint8_t getCjkUiGlyphWidth(uint32_t codepoint) {
 def main():
     parser = argparse.ArgumentParser(description='Generate CJK UI font header')
     parser.add_argument('--size', type=int, default=26, help='Pixel size (default: 26)')
-    parser.add_argument('--font', type=str, required=True, help='Path to Source Han Sans font file')
+    parser.add_argument('--font', type=str, required=True, help='Path to font file (.otf/.ttf)')
     parser.add_argument('--output', type=str, help='Output path (default: lib/GfxRenderer/cjk_ui_font_SIZE.h)')
+    parser.add_argument('--translations', type=str,
+                        help='Path to translations directory (default: auto-detect from project root)')
     args = parser.parse_args()
 
     script_dir = Path(__file__).parent
@@ -271,7 +296,15 @@ def main():
         print(f"Error: Font file not found: {args.font}")
         sys.exit(1)
 
-    if generate_font_header(args.font, args.size, output_path):
+    # Auto-detect translations directory
+    translations_dir = args.translations
+    if not translations_dir:
+        default_dir = project_root / 'lib' / 'I18n' / 'translations'
+        if default_dir.is_dir():
+            translations_dir = str(default_dir)
+            print(f"Auto-detected translations: {translations_dir}")
+
+    if generate_font_header(args.font, args.size, output_path, translations_dir):
         print("Success!")
     else:
         print("Failed!")

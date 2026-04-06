@@ -7,8 +7,9 @@ name: Build & Publish SD Card Fonts
 on:
   workflow_dispatch:
   push:
-    branches:
-      - ci-font-packaging   # TEMPORARY: remove before merging
+    branches: [master]
+    paths:
+      - 'lib/EpdFont/scripts/sd-fonts.yaml'
 
 jobs:
   build-fonts:

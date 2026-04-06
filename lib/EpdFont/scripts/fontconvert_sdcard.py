@@ -497,23 +497,30 @@ def rasterize_font_style(fontfile, size, intervals, style_id=0, force_autohint=F
             return face
         return None
 
-    # Validate intervals: remove codepoints not present in the font
+    # Validate intervals: keep original interval boundaries intact, inserting
+    # empty glyphs for codepoints not present in the font.  This prevents
+    # interval fragmentation that would otherwise consume excessive RAM on the
+    # ESP32-C3 (e.g. BIZ UDGothic: 4500+ intervals → ~55 KB per style).
     print(f"  [{style_label}] Validating intervals against font...", file=sys.stderr)
     validated_intervals = []
+    missing_cps = set()
     for i_start, i_end in intervals:
-        start = i_start
+        has_any = False
         for code_point in range(i_start, i_end + 1):
             f = load_glyph(code_point)
-            if f is None:
-                if start < code_point:
-                    validated_intervals.append((start, code_point - 1))
-                start = code_point + 1
-        if start <= i_end:
-            validated_intervals.append((start, i_end))
+            if f is not None:
+                has_any = True
+            else:
+                missing_cps.add(code_point)
+        if has_any:
+            validated_intervals.append((i_start, i_end))
 
     intervals = validated_intervals
     total_glyphs = sum(end - start + 1 for start, end in intervals)
-    print(f"  [{style_label}] Validated: {len(intervals)} intervals, {total_glyphs} glyphs", file=sys.stderr)
+    total_missing = sum(1 for cp in missing_cps
+                        if any(s <= cp <= e for s, e in intervals))
+    print(f"  [{style_label}] Validated: {len(intervals)} intervals, {total_glyphs} glyphs "
+          f"({total_missing} empty placeholders)", file=sys.stderr)
 
     # Set font size at 150 DPI (matching fontconvert.py)
     face.set_char_size(size << 6, size << 6, 150, 150)

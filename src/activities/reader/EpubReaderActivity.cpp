@@ -164,7 +164,7 @@ void EpubReaderActivity::loop() {
     const int bookProgressPercent = clampPercent(static_cast<int>(bookProgress + 0.5f));
     startActivityForResult(std::make_unique<EpubReaderMenuActivity>(
                                renderer, mappedInput, epub->getTitle(), menuCurrentPage, menuTotalPages,
-                               bookProgressPercent, SETTINGS.orientation, !currentPageFootnotes.empty()),
+                               bookProgressPercent, SETTINGS.orientation, !currentPageFootnotes.empty(), verticalMode),
                            [this](const ActivityResult& result) {
                              // Always apply orientation change even if the menu was cancelled
                              const auto& menu = std::get<MenuResult>(result.data);
@@ -388,11 +388,12 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       break;
     }
     case EpubReaderMenuActivity::MenuAction::STYLE_LINE_SPACING: {
+      uint8_t& target = verticalMode ? SETTINGS.lineSpacingVertical : SETTINGS.lineSpacingHorizontal;
       startActivityForResult(
           std::make_unique<LineSpacingSelectionActivity>(
-              renderer, mappedInput, static_cast<int>(SETTINGS.lineSpacing),
-              [this](const int selectedValue) {
-                SETTINGS.lineSpacing = static_cast<uint8_t>(selectedValue);
+              renderer, mappedInput, static_cast<int>(target),
+              [this, &target](const int selectedValue) {
+                target = static_cast<uint8_t>(selectedValue);
                 SETTINGS.saveToFile();
                 finish();
               },
@@ -634,10 +635,11 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     LOG_DBG("ERS", "Loading file: %s, index: %d", filepath.c_str(), currentSpineIndex);
     section = std::unique_ptr<Section>(new Section(epub, currentSpineIndex, renderer));
 
-    const float lineCompression = SETTINGS.getReaderLineCompression();
+    const float lineCompression = SETTINGS.getReaderLineCompression(verticalMode);
     renderer.setVerticalCharSpacing(SETTINGS.getVerticalCharSpacingPercent());
-    LOG_DBG("ERS", "Reflow params: lineSpacing=%u, compression=%.2f, viewport=%ux%u", SETTINGS.lineSpacing,
-            lineCompression, viewportWidth, viewportHeight);
+    LOG_DBG("ERS", "Reflow params: lineSpacing=%u, compression=%.2f, viewport=%ux%u, vertical=%d",
+            verticalMode ? SETTINGS.lineSpacingVertical : SETTINGS.lineSpacingHorizontal, lineCompression,
+            viewportWidth, viewportHeight, verticalMode);
 
     if (!section->loadSectionFile(SETTINGS.getReaderFontId(), lineCompression,
                                   SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
@@ -784,7 +786,7 @@ void EpubReaderActivity::silentIndexNextChapterIfNeeded(const uint16_t viewportW
   }
 
   Section nextSection(epub, nextSpineIndex, renderer);
-  if (nextSection.loadSectionFile(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
+  if (nextSection.loadSectionFile(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(verticalMode),
                                   SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
                                   viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.firstLineIndent,
                                   SETTINGS.embeddedStyle, SETTINGS.imageRendering, verticalMode)) {
@@ -793,7 +795,7 @@ void EpubReaderActivity::silentIndexNextChapterIfNeeded(const uint16_t viewportW
 
   LOG_DBG("ERS", "Silently indexing next chapter: %d", nextSpineIndex);
   const int silentHeadingFontIds[6] = {SETTINGS.getHeadingFontId(1), SETTINGS.getHeadingFontId(2), 0, 0, 0, 0};
-  if (!nextSection.createSectionFile(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
+  if (!nextSection.createSectionFile(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(verticalMode),
                                      SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
                                      viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.firstLineIndent,
                                      SETTINGS.embeddedStyle, SETTINGS.imageRendering, verticalMode, nullptr,

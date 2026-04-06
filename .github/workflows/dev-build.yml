@@ -3,6 +3,12 @@ name: Dev Build
 on:
   push:
     branches: [master]
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+      - '.github/workflows/release-fonts.yml'
+      - 'lib/EpdFont/scripts/**'
+      - 'scripts/generate-font-manifest.py'
 
 permissions:
   contents: write

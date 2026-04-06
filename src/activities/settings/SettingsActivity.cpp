@@ -240,12 +240,14 @@ void SettingsActivity::toggleCurrentSetting() {
     setting.valueSetter((cur + 1) % totalValues);
   } else if (setting.type == SettingType::VALUE && setting.valuePtr != nullptr) {
     // Line spacing uses a slider activity (0.8x-2.5x) for finer control.
-    if (setting.nameId == StrId::STR_LINE_SPACING) {
+    if (setting.nameId == StrId::STR_LINE_SPACING_HORIZONTAL || setting.nameId == StrId::STR_LINE_SPACING_VERTICAL) {
+      const bool isVertical = (setting.nameId == StrId::STR_LINE_SPACING_VERTICAL);
+      uint8_t& target = isVertical ? SETTINGS.lineSpacingVertical : SETTINGS.lineSpacingHorizontal;
       startActivityForResult(
           std::make_unique<LineSpacingSelectionActivity>(
-              renderer, mappedInput, static_cast<int>(SETTINGS.lineSpacing),
-              [this](const int selectedValue) {
-                SETTINGS.lineSpacing = static_cast<uint8_t>(selectedValue);
+              renderer, mappedInput, static_cast<int>(target),
+              [this, &target](const int selectedValue) {
+                target = static_cast<uint8_t>(selectedValue);
                 SETTINGS.saveToFile();
                 finish();
               },

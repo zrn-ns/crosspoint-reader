@@ -57,6 +57,8 @@ Xteink X3/X4 向けの日本語EPUB閲覧に特化したファームウェアフ
 
 対応ブラウザ: Chrome 89+, Edge 89+
 
+⚠️次セクションに記載の「フォントのインストール」を実施しないと、書籍内の日本語フォントが正常に表示されません！
+
 ### 手動インストール
 
 1. [Releases ページ](https://github.com/zrn-ns/crosspoint-jp/releases)から最新の Dev Build を開く

@@ -190,7 +190,8 @@ class CrossPointSettings {
   // Reader font settings
   uint8_t fontFamily = BOOKERLY;
   uint8_t fontSize = MEDIUM;
-  uint8_t lineSpacing = LINE_SPACING_DEFAULT;
+  uint8_t lineSpacingHorizontal = LINE_SPACING_DEFAULT;
+  uint8_t lineSpacingVertical = LINE_SPACING_DEFAULT;
   uint8_t paragraphAlignment = JUSTIFIED;
   uint8_t writingMode = WM_AUTO;
   uint8_t verticalCharSpacing = VERTICAL_CHAR_SPACING_DEFAULT;
@@ -270,7 +271,7 @@ class CrossPointSettings {
   bool loadFromBinaryFile();
 
  public:
-  float getReaderLineCompression() const;
+  float getReaderLineCompression(bool vertical) const;
   unsigned long getSleepTimeoutMs() const;
   int getRefreshFrequency() const;
 };

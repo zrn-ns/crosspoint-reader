@@ -171,16 +171,18 @@ bool CrossPointSettings::loadFromBinaryFile() {
     {
       uint8_t rawLineSpacing = LINE_SPACING_DEFAULT;
       serialization::readPod(inputFile, rawLineSpacing);
+      uint8_t migratedValue;
       if (rawLineSpacing < LINE_COMPRESSION_COUNT) {
-        lineSpacing = migrateLegacyLineSpacing(rawLineSpacing);
+        migratedValue = migrateLegacyLineSpacing(rawLineSpacing);
       } else if (rawLineSpacing >= LINE_SPACING_MIN && rawLineSpacing <= LINE_SPACING_MAX) {
-        lineSpacing = rawLineSpacing;
+        migratedValue = rawLineSpacing;
       } else if (rawLineSpacing >= 20 && rawLineSpacing <= 60) {
-        // Legacy 20..60 slider values map to default 1.0x in the new scale.
-        lineSpacing = LINE_SPACING_DEFAULT;
+        migratedValue = LINE_SPACING_DEFAULT;
       } else {
-        lineSpacing = LINE_SPACING_DEFAULT;
+        migratedValue = LINE_SPACING_DEFAULT;
       }
+      lineSpacingHorizontal = migratedValue;
+      lineSpacingVertical = migratedValue;
     }
     if (++settingsRead >= fileSettingsCount) break;
     readAndValidate(inputFile, paragraphAlignment, PARAGRAPH_ALIGNMENT_COUNT);
@@ -259,13 +261,11 @@ bool CrossPointSettings::loadFromBinaryFile() {
   return true;
 }
 
-float CrossPointSettings::getReaderLineCompression() const {
-  const uint8_t clampedLineSpacing = (lineSpacing < LINE_SPACING_MIN)
-                                         ? LINE_SPACING_MIN
-                                         : ((lineSpacing > LINE_SPACING_MAX) ? LINE_SPACING_MAX : lineSpacing);
-
-  // Value is stored directly in percent of font line height (e.g. 100 => 1.0x).
-  return static_cast<float>(clampedLineSpacing) / 100.0f;
+float CrossPointSettings::getReaderLineCompression(const bool vertical) const {
+  const uint8_t raw = vertical ? lineSpacingVertical : lineSpacingHorizontal;
+  const uint8_t clamped =
+      (raw < LINE_SPACING_MIN) ? LINE_SPACING_MIN : ((raw > LINE_SPACING_MAX) ? LINE_SPACING_MAX : raw);
+  return static_cast<float>(clamped) / 100.0f;
 }
 
 unsigned long CrossPointSettings::getSleepTimeoutMs() const {

@@ -359,6 +359,7 @@ STR_WRITING_MODE: "Writing Mode"
 STR_WM_AUTO: "Auto"
 STR_WM_HORIZONTAL: "Horizontal"
 STR_WM_VERTICAL: "Vertical"
+STR_VERT_CHAR_SPACING: "Vertical Char Spacing"
 
 STR_STATUS_BAR: "Status Bar"
 STR_FRONT_BTN_LAYOUT: "Front Button Layout"

@@ -118,6 +118,9 @@ class CrossPointSettings {
   };
   enum WRITING_MODE : uint8_t { WM_AUTO = 0, WM_HORIZONTAL = 1, WM_VERTICAL = 2, WRITING_MODE_COUNT };
 
+  // Vertical character spacing (stored as percent 0–30, step 5)
+  static constexpr uint8_t VERTICAL_CHAR_SPACING_DEFAULT = 10;
+
   // Auto-sleep timeout options (in minutes)
   enum SLEEP_TIMEOUT {
     SLEEP_1_MIN = 0,
@@ -190,6 +193,7 @@ class CrossPointSettings {
   uint8_t lineSpacing = LINE_SPACING_DEFAULT;
   uint8_t paragraphAlignment = JUSTIFIED;
   uint8_t writingMode = WM_AUTO;
+  uint8_t verticalCharSpacing = VERTICAL_CHAR_SPACING_DEFAULT;
   // Auto-sleep timeout setting (default 10 minutes)
   uint8_t sleepTimeout = SLEEP_10_MIN;
   // E-ink refresh frequency (default 15 pages)
@@ -244,6 +248,8 @@ class CrossPointSettings {
   uint16_t getPowerButtonDuration() const {
     return (shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP) ? 10 : 400;
   }
+  // Returns the vertical character spacing as a percentage (0–30).
+  uint8_t getVerticalCharSpacingPercent() const { return verticalCharSpacing; }
   int getReaderFontId() const;
   int getBuiltInReaderFontId() const;
   // Returns font ID for heading level (1-6). Returns 0 if same as body font.

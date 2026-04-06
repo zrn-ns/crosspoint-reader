@@ -59,6 +59,7 @@ class GfxRenderer {
   // recording to the (non-const) FontCacheManager. Same pragmatic compromise
   // as before, concentrated in a single pointer instead of four fields.
   mutable FontCacheManager* fontCacheManager_ = nullptr;
+  uint8_t verticalCharSpacingPercent_ = 10;
 
   // Dark mode: true = black background, false = white background
   bool darkMode = false;
@@ -220,6 +221,17 @@ class GfxRenderer {
   // Helper for drawing vertical text (top-to-bottom, for tategaki)
   void drawTextVertical(int fontId, int x, int y, const char* text, bool black = true,
                         EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
+
+  // Draw text rotated 90° CW, progressing top-to-bottom (for Sideways words in vertical text)
+  // columnWidth: the CJK column width to center the rotated text within (0 = no centering)
+  void drawTextSideways(int fontId, int x, int y, const char* text, bool black = true,
+                        EpdFontFamily::Style style = EpdFontFamily::REGULAR,
+                        int columnWidth = 0) const;
+
+  // Vertical character spacing percent (0–30). Set by the caller before rendering.
+  void setVerticalCharSpacing(uint8_t percent) { verticalCharSpacingPercent_ = percent; }
+  uint8_t getVerticalCharSpacing() const { return verticalCharSpacingPercent_; }
+
   int getTextHeight(int fontId) const;
 
   // Grayscale functions

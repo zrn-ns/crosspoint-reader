@@ -154,6 +154,8 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
       SettingInfo::Enum(StrId::STR_WRITING_MODE, &CrossPointSettings::writingMode,
                         {StrId::STR_WM_AUTO, StrId::STR_WM_HORIZONTAL, StrId::STR_WM_VERTICAL}, "writingMode",
                         StrId::STR_CAT_READER),
+      SettingInfo::Value(StrId::STR_VERT_CHAR_SPACING, &CrossPointSettings::verticalCharSpacing, {0, 50, 5},
+                         "verticalCharSpacing", StrId::STR_CAT_READER),
       SettingInfo::Toggle(StrId::STR_INVERT_IMAGES, &CrossPointSettings::invertImages, "invertImages",
                           StrId::STR_CAT_READER),
 

@@ -29,8 +29,8 @@ jobs:
 
           mkdir -p _site/dev _site/stable
 
-          # Dev manifest (latest prerelease)
-          DEV_TAG=$(gh api "repos/${REPO}/releases" --jq '[.[] | select(.prerelease == true)] | first | .tag_name // empty')
+          # Dev manifest (latest prerelease, exclude non-firmware releases)
+          DEV_TAG=$(gh api "repos/${REPO}/releases" --jq '[.[] | select(.prerelease == true and (.tag_name | startswith("dev-")))] | first | .tag_name // empty')
           if [ -n "${DEV_TAG}" ]; then
             echo "Downloading dev assets: ${DEV_TAG}"
             gh release download "${DEV_TAG}" --repo "${REPO}" --pattern "bootloader.bin" --dir _site/dev
@@ -58,8 +58,8 @@ jobs:
             echo "No dev release found, skipping dev manifest"
           fi
 
-          # Stable manifest (latest non-prerelease)
-          STABLE_TAG=$(gh api "repos/${REPO}/releases" --jq '[.[] | select(.prerelease == false and .draft == false)] | first | .tag_name // empty')
+          # Stable manifest (latest non-prerelease, exclude non-firmware releases like sd-fonts)
+          STABLE_TAG=$(gh api "repos/${REPO}/releases" --jq '[.[] | select(.prerelease == false and .draft == false and (.tag_name | startswith("sd-") | not))] | first | .tag_name // empty')
           if [ -n "${STABLE_TAG}" ]; then
             echo "Downloading stable assets: ${STABLE_TAG}"
             gh release download "${STABLE_TAG}" --repo "${REPO}" --pattern "bootloader.bin" --dir _site/stable

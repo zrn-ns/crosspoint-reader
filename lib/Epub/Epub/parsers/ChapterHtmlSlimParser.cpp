@@ -924,8 +924,7 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
         cjkWord[j] = s[i + j];
       }
       if (self->verticalMode) {
-        self->currentTextBlock->addWord(cjkWord, EpdFontFamily::REGULAR,
-                                        VerticalTextUtils::VerticalBehavior::Upright);
+        self->currentTextBlock->addWord(cjkWord, EpdFontFamily::REGULAR, VerticalTextUtils::VerticalBehavior::Upright);
       } else {
         self->currentTextBlock->addWord(cjkWord, EpdFontFamily::REGULAR);
       }
@@ -1295,8 +1294,7 @@ void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
 // Unlike wrappedText() which only breaks on spaces, this breaks at any character boundary,
 // making it suitable for CJK text without spaces.
 static std::vector<std::string> wrapCellText(GfxRenderer& renderer, const int fontId, const char* text,
-                                             const int maxWidth, const int maxLines,
-                                             const EpdFontFamily::Style style) {
+                                             const int maxWidth, const int maxLines, const EpdFontFamily::Style style) {
   std::vector<std::string> lines;
   if (!text || !*text || maxWidth <= 0 || maxLines <= 0) return lines;
 
@@ -1399,8 +1397,8 @@ void ChapterHtmlSlimParser::flushTableAsGrid() {
   if (totalNeeded > viewportWidth) {
     // Scale down proportionally to fit viewport
     for (int col = 0; col < maxCols; col++) {
-      layout->colWidths[col] = static_cast<uint16_t>(
-          static_cast<int>(layout->colWidths[col]) * viewportWidth / totalNeeded);
+      layout->colWidths[col] =
+          static_cast<uint16_t>(static_cast<int>(layout->colWidths[col]) * viewportWidth / totalNeeded);
     }
   }
 
@@ -1425,7 +1423,8 @@ void ChapterHtmlSlimParser::flushTableAsGrid() {
       const auto style = headers[col] ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR;
       const int maxTextW = layout->colWidths[col] - CELL_PADDING * 2;
       if (maxTextW > 0 && !row.cells[col].text.empty()) {
-        cellLines[col] = wrapCellText(renderer, tblFontId, row.cells[col].text.c_str(), maxTextW, MAX_CELL_LINES, style);
+        cellLines[col] =
+            wrapCellText(renderer, tblFontId, row.cells[col].text.c_str(), maxTextW, MAX_CELL_LINES, style);
       }
       maxLinesInRow = std::max(maxLinesInRow, static_cast<int>(cellLines[col].size()));
     }
@@ -1433,8 +1432,8 @@ void ChapterHtmlSlimParser::flushTableAsGrid() {
     // Add descenderExtra so bottom padding visually matches top padding
     const int16_t rowHeight = static_cast<int16_t>(maxLinesInRow * lineH + descenderExtra + CELL_PADDING * 2);
 
-    auto block = std::make_shared<TableRowBlock>(
-        std::move(cellLines), std::move(headers), layout, rowHeight, rowIdx == 0, rowIdx == numRows - 1);
+    auto block = std::make_shared<TableRowBlock>(std::move(cellLines), std::move(headers), layout, rowHeight,
+                                                 rowIdx == 0, rowIdx == numRows - 1);
 
     if (!currentPage) {
       currentPage.reset(new Page());
@@ -1483,7 +1482,6 @@ void ChapterHtmlSlimParser::makePages() {
   const int horizontalInset = blockStyle.totalHorizontalInset();
   const uint16_t effectiveWidth =
       (horizontalInset < viewportWidth) ? static_cast<uint16_t>(viewportWidth - horizontalInset) : viewportWidth;
-
 
   const int layoutFontId = (blockStyle.fontId != 0) ? blockStyle.fontId : fontId;
   if (verticalMode) {

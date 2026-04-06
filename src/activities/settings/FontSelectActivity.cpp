@@ -192,7 +192,9 @@ void FontSelectActivity::render() {
         return "";
       },
       nullptr, nullptr,
-      [currentIndex](int i) -> std::string { return (i == currentIndex) ? std::string(tr(STR_ON_MARKER)) : std::string(""); });
+      [currentIndex](int i) -> std::string {
+        return (i == currentIndex) ? std::string(tr(STR_ON_MARKER)) : std::string("");
+      });
 
   // Button hints
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));

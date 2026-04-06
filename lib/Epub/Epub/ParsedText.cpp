@@ -129,8 +129,8 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
 }
 
 void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
-                         const VerticalTextUtils::VerticalBehavior vBehavior,
-                         const bool underline, const bool attachToPrevious) {
+                         const VerticalTextUtils::VerticalBehavior vBehavior, const bool underline,
+                         const bool attachToPrevious) {
   addWord(std::move(word), fontStyle, underline, attachToPrevious);
   if (wordVerticalBehaviors.capacity() == 0) {
     wordVerticalBehaviors.reserve(800);
@@ -216,8 +216,7 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
   }
 }
 
-void ParsedText::layoutVerticalColumns(const GfxRenderer& renderer, const int fontId,
-                                       const uint16_t columnHeight,
+void ParsedText::layoutVerticalColumns(const GfxRenderer& renderer, const int fontId, const uint16_t columnHeight,
                                        const std::function<void(std::shared_ptr<TextBlock>)>& processColumn) {
   if (words.empty()) return;
 
@@ -238,8 +237,8 @@ void ParsedText::layoutVerticalColumns(const GfxRenderer& renderer, const int fo
   // Cannot use a hardcoded reference char ("一") because it may not be in the advance table.
   int cjkCharAdvance = 0;
   for (size_t i = 0; i < words.size() && cjkCharAdvance == 0; i++) {
-    auto vb = (i < wordVerticalBehaviors.size()) ? wordVerticalBehaviors[i]
-                                                  : VerticalTextUtils::VerticalBehavior::Upright;
+    auto vb =
+        (i < wordVerticalBehaviors.size()) ? wordVerticalBehaviors[i] : VerticalTextUtils::VerticalBehavior::Upright;
     if (vb == VerticalTextUtils::VerticalBehavior::Upright) {
       cjkCharAdvance = renderer.getTextAdvanceX(fontId, words[i].c_str(), wordStyles[i]);
     }
@@ -253,8 +252,8 @@ void ParsedText::layoutVerticalColumns(const GfxRenderer& renderer, const int fo
   const int cjkSpacing = cjkCharAdvance * sp / 100;
 
   for (size_t i = 0; i < words.size(); i++) {
-    auto vb = (i < wordVerticalBehaviors.size()) ? wordVerticalBehaviors[i]
-                                                  : VerticalTextUtils::VerticalBehavior::Upright;
+    auto vb =
+        (i < wordVerticalBehaviors.size()) ? wordVerticalBehaviors[i] : VerticalTextUtils::VerticalBehavior::Upright;
     uint16_t baseHeight;
     switch (vb) {
       case VerticalTextUtils::VerticalBehavior::Sideways:
@@ -294,9 +293,8 @@ void ParsedText::layoutVerticalColumns(const GfxRenderer& renderer, const int fo
       y += wordHeights[j];
     }
 
-    processColumn(std::make_shared<TextBlock>(
-        std::move(colWords), std::move(colXpos), std::move(colStyles),
-        blockStyle, std::move(colYpos), true));
+    processColumn(std::make_shared<TextBlock>(std::move(colWords), std::move(colXpos), std::move(colStyles), blockStyle,
+                                              std::move(colYpos), true));
   };
 
   // Helper: get the first codepoint of a word string
@@ -312,15 +310,13 @@ void ParsedText::layoutVerticalColumns(const GfxRenderer& renderer, const int fo
 
       // Check if word at breakAt would start with a kinsoku-head character
       // If so, pull it back (include it in the current column instead)
-      while (breakAt > columnStart + 1 &&
-             VerticalTextUtils::isKinsokuHead(firstCodepoint(words[breakAt]))) {
+      while (breakAt > columnStart + 1 && VerticalTextUtils::isKinsokuHead(firstCodepoint(words[breakAt]))) {
         breakAt--;
       }
 
       // Check if the last word in the current column is a kinsoku-tail character
       // If so, pull it to the next column
-      if (breakAt > columnStart + 1 &&
-          VerticalTextUtils::isKinsokuTail(firstCodepoint(words[breakAt - 1]))) {
+      if (breakAt > columnStart + 1 && VerticalTextUtils::isKinsokuTail(firstCodepoint(words[breakAt - 1]))) {
         breakAt--;
       }
 

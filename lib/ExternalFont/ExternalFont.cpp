@@ -100,8 +100,8 @@ bool ExternalFont::parseFilename(const char* filepath) {
     return false;
   }
 
-  LOG_DBG("EFT", "Parsed: name=%s, size=%d, %dx%d, %d bytes/char", _fontName, _fontSize, _charWidth,
-          _charHeight, _bytesPerChar);
+  LOG_DBG("EFT", "Parsed: name=%s, size=%d, %dx%d, %d bytes/char", _fontName, _fontSize, _charWidth, _charHeight,
+          _bytesPerChar);
 
   return true;
 }
@@ -122,7 +122,8 @@ bool ExternalFont::load(const char* filepath) {
   _cache = new (std::nothrow) CacheEntry[CACHE_SIZE];
   _hashTable = new (std::nothrow) int16_t[CACHE_SIZE];
   if (!_cache || !_hashTable) {
-    LOG_ERR("EFT", "Failed to allocate glyph cache (%d bytes)", static_cast<int>(CACHE_SIZE * (sizeof(CacheEntry) + sizeof(int16_t))));
+    LOG_ERR("EFT", "Failed to allocate glyph cache (%d bytes)",
+            static_cast<int>(CACHE_SIZE * (sizeof(CacheEntry) + sizeof(int16_t))));
     delete[] _cache;
     _cache = nullptr;
     delete[] _hashTable;
@@ -393,6 +394,5 @@ void ExternalFont::preloadGlyphs(const uint32_t* codepoints, size_t count) {
     loaded++;
   }
 
-  LOG_DBG("EFT", "Preload done: %zu loaded, %zu already cached, took %lums", loaded, skipped,
-          millis() - startTime);
+  LOG_DBG("EFT", "Preload done: %zu loaded, %zu already cached, took %lums", loaded, skipped, millis() - startTime);
 }

@@ -107,7 +107,8 @@ void TxtReaderActivity::initializeReader() {
   viewportWidth = renderer.getScreenWidth() - cachedOrientedMarginLeft - cachedOrientedMarginRight;
   const int viewportHeight = renderer.getScreenHeight() - cachedOrientedMarginTop - cachedOrientedMarginBottom;
   const int baseLineHeight = renderer.getLineHeight(cachedFontId);
-  const int lineHeight = std::max(1, static_cast<int>(baseLineHeight * SETTINGS.getReaderLineCompression(false) + 0.5f));
+  const int lineHeight =
+      std::max(1, static_cast<int>(baseLineHeight * SETTINGS.getReaderLineCompression(false) + 0.5f));
 
   linesPerPage = viewportHeight / lineHeight;
   if (linesPerPage < 1) linesPerPage = 1;
@@ -329,7 +330,8 @@ void TxtReaderActivity::render(RenderLock&&) {
 
 void TxtReaderActivity::renderPage() {
   const int baseLineHeight = renderer.getLineHeight(cachedFontId);
-  const int lineHeight = std::max(1, static_cast<int>(baseLineHeight * SETTINGS.getReaderLineCompression(false) + 0.5f));
+  const int lineHeight =
+      std::max(1, static_cast<int>(baseLineHeight * SETTINGS.getReaderLineCompression(false) + 0.5f));
   const int contentWidth = viewportWidth;
 
   // Render text lines with alignment

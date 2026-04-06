@@ -1,8 +1,9 @@
 #include "LineSpacingSelectionActivity.h"
 
-#include <cstdio>
 #include <GfxRenderer.h>
 #include <I18n.h>
+
+#include <cstdio>
 
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"

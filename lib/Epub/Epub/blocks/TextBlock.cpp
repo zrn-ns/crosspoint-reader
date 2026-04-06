@@ -4,7 +4,6 @@
 #include <Logging.h>
 #include <Serialization.h>
 #include <Utf8.h>
-
 #include <VerticalTextUtils.h>
 
 void TextBlock::collectCodepoints(std::vector<uint32_t>& out, size_t max) const {
@@ -44,7 +43,6 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
   }
 
   const int effectiveFontId = (blockStyle.fontId != 0) ? blockStyle.fontId : fontId;
-
 
   // Compute column width once for Sideways/TateChuYoko centering
   int columnWidth = 0;
@@ -217,7 +215,6 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(FsFile& file) {
     for (auto& y : wordYpos) serialization::readPod(file, y);
   }
 
-  return std::unique_ptr<TextBlock>(
-      new TextBlock(std::move(words), std::move(wordXpos), std::move(wordStyles), blockStyle,
-                    std::move(wordYpos), vertical));
+  return std::unique_ptr<TextBlock>(new TextBlock(std::move(words), std::move(wordXpos), std::move(wordStyles),
+                                                  blockStyle, std::move(wordYpos), vertical));
 }

@@ -1,9 +1,10 @@
 #include "EpubReaderMenuActivity.h"
 
-#include <cstdio>
 #include <FontManager.h>
 #include <GfxRenderer.h>
 #include <I18n.h>
+
+#include <cstdio>
 
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
@@ -74,7 +75,6 @@ void EpubReaderMenuActivity::loop() {
     }
     return;
   }
-
 
   // Handle navigation
   buttonNavigator.onNext([this] {

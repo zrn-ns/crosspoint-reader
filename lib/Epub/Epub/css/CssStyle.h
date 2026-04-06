@@ -133,7 +133,7 @@ struct CssStyle {
   CssLength paddingRight;   // Padding right
   CssLength imageHeight;    // Height for img (e.g. 2em) – width derived from aspect ratio when only height set
   CssLength imageWidth;     // Width for img when both or only width set
-  CssDisplay display = CssDisplay::Block;  // display property (Block or None)
+  CssDisplay display = CssDisplay::Block;                     // display property (Block or None)
   CssWritingMode writingMode = CssWritingMode::HorizontalTb;  // writing-mode property
 
   CssPropertyFlags defined;  // Tracks which properties were explicitly set

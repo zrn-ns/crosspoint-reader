@@ -1,9 +1,10 @@
 #include "SettingsActivity.h"
 
-#include <cstdio>
 #include <FontManager.h>
 #include <GfxRenderer.h>
 #include <Logging.h>
+
+#include <cstdio>
 
 #include "ButtonRemapActivity.h"
 #include "CalibreSettingsActivity.h"
@@ -207,13 +208,12 @@ void SettingsActivity::toggleCurrentSetting() {
     }
     // Font Family: open FontSelectActivity (combined built-in + external fonts)
     if (setting.nameId == StrId::STR_FONT_FAMILY) {
-      startActivityForResult(
-          std::make_unique<FontSelectActivity>(renderer, mappedInput, FontSelectActivity::SelectMode::Reader,
-                                               [this] { finish(); }),
-          [this](const ActivityResult&) {
-            SETTINGS.saveToFile();
-            rebuildSettingsLists();
-          });
+      startActivityForResult(std::make_unique<FontSelectActivity>(
+                                 renderer, mappedInput, FontSelectActivity::SelectMode::Reader, [this] { finish(); }),
+                             [this](const ActivityResult&) {
+                               SETTINGS.saveToFile();
+                               rebuildSettingsLists();
+                             });
       return;
     }
     const uint8_t currentValue = SETTINGS.*(setting.valuePtr);
@@ -243,16 +243,15 @@ void SettingsActivity::toggleCurrentSetting() {
     if (setting.nameId == StrId::STR_LINE_SPACING_HORIZONTAL || setting.nameId == StrId::STR_LINE_SPACING_VERTICAL) {
       const bool isVertical = (setting.nameId == StrId::STR_LINE_SPACING_VERTICAL);
       uint8_t& target = isVertical ? SETTINGS.lineSpacingVertical : SETTINGS.lineSpacingHorizontal;
-      startActivityForResult(
-          std::make_unique<LineSpacingSelectionActivity>(
-              renderer, mappedInput, static_cast<int>(target),
-              [this, &target](const int selectedValue) {
-                target = static_cast<uint8_t>(selectedValue);
-                SETTINGS.saveToFile();
-                finish();
-              },
-              [this] { finish(); }),
-          [this](const ActivityResult&) { requestUpdate(); });
+      startActivityForResult(std::make_unique<LineSpacingSelectionActivity>(
+                                 renderer, mappedInput, static_cast<int>(target),
+                                 [this, &target](const int selectedValue) {
+                                   target = static_cast<uint8_t>(selectedValue);
+                                   SETTINGS.saveToFile();
+                                   finish();
+                                 },
+                                 [this] { finish(); }),
+                             [this](const ActivityResult&) { requestUpdate(); });
       return;
     }
 
@@ -298,13 +297,12 @@ void SettingsActivity::toggleCurrentSetting() {
         startActivityForResult(std::make_unique<LanguageSelectActivity>(renderer, mappedInput), resultHandler);
         break;
       case SettingAction::SelectUiFont:
-        startActivityForResult(
-            std::make_unique<FontSelectActivity>(renderer, mappedInput, FontSelectActivity::SelectMode::UI,
-                                                 [this] { finish(); }),
-            [this](const ActivityResult&) {
-              SETTINGS.saveToFile();
-              rebuildSettingsLists();
-            });
+        startActivityForResult(std::make_unique<FontSelectActivity>(
+                                   renderer, mappedInput, FontSelectActivity::SelectMode::UI, [this] { finish(); }),
+                               [this](const ActivityResult&) {
+                                 SETTINGS.saveToFile();
+                                 rebuildSettingsLists();
+                               });
         break;
       case SettingAction::None:
         // Do nothing
@@ -344,11 +342,12 @@ void SettingsActivity::render(RenderLock&&) {
   const auto& settings = *currentSettings;
   GUI.drawList(
       renderer,
-      Rect{0, metrics.topPadding + hintGutterHeight + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing,
-           pageWidth,
-           pageHeight -
-               (metrics.topPadding + hintGutterHeight + metrics.headerHeight + metrics.tabBarHeight +
-                metrics.buttonHintsHeight + metrics.verticalSpacing * 2)},
+      Rect{
+          0,
+          metrics.topPadding + hintGutterHeight + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing,
+          pageWidth,
+          pageHeight - (metrics.topPadding + hintGutterHeight + metrics.headerHeight + metrics.tabBarHeight +
+                        metrics.buttonHintsHeight + metrics.verticalSpacing * 2)},
       settingsCount, selectedSettingIndex - 1,
       [&settings](int index) { return std::string(I18N.get(settings[index].nameId)); }, nullptr, nullptr,
       [&settings](int i) {
@@ -362,7 +361,7 @@ void SettingsActivity::render(RenderLock&&) {
           if (setting.nameId == StrId::STR_FONT_FAMILY && FontMgr.getSelectedIndex() >= 0) {
             const FontInfo* info = FontMgr.getFontInfo(FontMgr.getSelectedIndex());
             valueText = info ? info->name : tr(STR_EXTERNAL_FONT);
-          // Font Size: show actual pixel size when external font is active
+            // Font Size: show actual pixel size when external font is active
           } else if (setting.nameId == StrId::STR_FONT_SIZE && FontMgr.getSelectedIndex() >= 0) {
             const FontInfo* info = FontMgr.getFontInfo(FontMgr.getSelectedIndex());
             valueText = info ? (std::to_string(info->size) + "pt") : "—";

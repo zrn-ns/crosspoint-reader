@@ -8,10 +8,10 @@
 #include <SdCardFont.h>
 #include <Utf8.h>
 
+#include <algorithm>
+
 #include "FontCacheManager.h"
 #include "VerticalTextUtils.h"
-
-#include <algorithm>
 
 // Built-in CJK UI font (embedded in flash) - 20px only
 #include "cjk_ui_font_20.h"
@@ -1792,7 +1792,9 @@ void GfxRenderer::drawTextSideways(const int fontId, const int x, const int y, c
 
   while (uint32_t cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text))) {
     const EpdGlyph* glyph = font.getGlyph(cp, style);
-    if (!glyph) { glyph = font.getGlyph('?', style); }
+    if (!glyph) {
+      glyph = font.getGlyph('?', style);
+    }
     if (!glyph) continue;
 
     const int yPosPx = fp4::toPixel(yPosFP);
@@ -1803,7 +1805,8 @@ void GfxRenderer::drawTextSideways(const int fontId, const int x, const int y, c
       const int drawW = needsScale ? ((glyph->width * scale + 128) >> 8) : glyph->width;
       const int drawLeft = needsScale ? ((glyph->left * static_cast<int>(scale) + 128) >> 8) : glyph->left;
       const int drawTop = needsScale ? ((glyph->top * static_cast<int>(scale) + 128) >> 8) : glyph->top;
-      const int drawAscender = needsScale ? ((fontData->ascender * static_cast<int>(scale) + 128) >> 8) : fontData->ascender;
+      const int drawAscender =
+          needsScale ? ((fontData->ascender * static_cast<int>(scale) + 128) >> 8) : fontData->ascender;
 
       // Center rotated glyph horizontally within the column
       int baseX;
@@ -2387,8 +2390,7 @@ void GfxRenderer::renderChar(const int fontId, const EpdFontFamily& fontFamily, 
   const int drawTop = needsScale ? ((glyph->top * static_cast<int>(scale) + 128) >> 8) : glyph->top;
 
   // Synthetic bold: Bold requested but font has no separate Bold style (same data as Regular)
-  const bool synthBold = (style & EpdFontFamily::BOLD) &&
-                         sdCardFontScales_.count(fontId) > 0 &&
+  const bool synthBold = (style & EpdFontFamily::BOLD) && sdCardFontScales_.count(fontId) > 0 &&
                          fontFamily.getData(style) == fontFamily.getData(EpdFontFamily::REGULAR);
   const int boldPasses = synthBold ? 2 : 1;
 

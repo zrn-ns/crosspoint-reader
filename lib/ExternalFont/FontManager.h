@@ -139,8 +139,8 @@ class FontManager {
   int _selectedIndex = -1;    // -1 = built-in font (reader)
   int _selectedUiIndex = -1;  // -1 = fallback to reader font
 
-  ExternalFont _activeFont;    // Reader font
-  ExternalFont _activeUiFont;  // UI font
+  ExternalFont _activeFont;        // Reader font
+  ExternalFont _activeUiFont;      // UI font
   bool _sdCardFontActive = false;  // When true, suppress ExternalFont for reader use
 
   bool isUiSharingReaderFont() const { return _selectedUiIndex >= 0 && _selectedUiIndex == _selectedIndex; }

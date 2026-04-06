@@ -229,9 +229,9 @@ void EpubReaderActivity::loop() {
   }
 
   if (prevTriggered) {
-    pageTurn(verticalMode);       // In vertical RTL: prev button = forward
+    pageTurn(verticalMode);  // In vertical RTL: prev button = forward
   } else {
-    pageTurn(!verticalMode);      // In vertical RTL: next button = backward
+    pageTurn(!verticalMode);  // In vertical RTL: next button = backward
   }
 }
 
@@ -354,15 +354,15 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
     }
     case EpubReaderMenuActivity::MenuAction::READER_SETTINGS: {
       // Open settings directly on the Reader category and return to reader on back.
-      startActivityForResult(
-          std::make_unique<SettingsActivity>(renderer, mappedInput, [this] { finish(); }, 1, 1),
-          [this](const ActivityResult&) {
-            // Reader settings (font/line spacing/margins etc.) may change pagination.
-            // Cache dir may have been deleted by ClearCacheActivity — recreate it.
-            if (epub) epub->setupCacheDir();
-            invalidateSectionPreservingPosition();
-            requestUpdate();
-          });
+      startActivityForResult(std::make_unique<SettingsActivity>(
+                                 renderer, mappedInput, [this] { finish(); }, 1, 1),
+                             [this](const ActivityResult&) {
+                               // Reader settings (font/line spacing/margins etc.) may change pagination.
+                               // Cache dir may have been deleted by ClearCacheActivity — recreate it.
+                               if (epub) epub->setupCacheDir();
+                               invalidateSectionPreservingPosition();
+                               requestUpdate();
+                             });
       break;
     }
     case EpubReaderMenuActivity::MenuAction::STYLE_FIRST_LINE_INDENT: {
@@ -378,30 +378,28 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       break;
     }
     case EpubReaderMenuActivity::MenuAction::STYLE_FONT_FAMILY: {
-      startActivityForResult(
-          std::make_unique<FontSelectActivity>(renderer, mappedInput, FontSelectActivity::SelectMode::Reader,
-                                              [this] { finish(); }),
-          [this](const ActivityResult&) {
-            invalidateSectionPreservingPosition();
-            requestUpdate();
-          });
+      startActivityForResult(std::make_unique<FontSelectActivity>(
+                                 renderer, mappedInput, FontSelectActivity::SelectMode::Reader, [this] { finish(); }),
+                             [this](const ActivityResult&) {
+                               invalidateSectionPreservingPosition();
+                               requestUpdate();
+                             });
       break;
     }
     case EpubReaderMenuActivity::MenuAction::STYLE_LINE_SPACING: {
       uint8_t& target = verticalMode ? SETTINGS.lineSpacingVertical : SETTINGS.lineSpacingHorizontal;
-      startActivityForResult(
-          std::make_unique<LineSpacingSelectionActivity>(
-              renderer, mappedInput, static_cast<int>(target),
-              [this, &target](const int selectedValue) {
-                target = static_cast<uint8_t>(selectedValue);
-                SETTINGS.saveToFile();
-                finish();
-              },
-              [this] { finish(); }),
-          [this](const ActivityResult&) {
-            invalidateSectionPreservingPosition();
-            requestUpdate();
-          });
+      startActivityForResult(std::make_unique<LineSpacingSelectionActivity>(
+                                 renderer, mappedInput, static_cast<int>(target),
+                                 [this, &target](const int selectedValue) {
+                                   target = static_cast<uint8_t>(selectedValue);
+                                   SETTINGS.saveToFile();
+                                   finish();
+                                 },
+                                 [this] { finish(); }),
+                             [this](const ActivityResult&) {
+                               invalidateSectionPreservingPosition();
+                               requestUpdate();
+                             });
       break;
     }
     case EpubReaderMenuActivity::MenuAction::STYLE_STATUS_BAR: {
@@ -627,8 +625,8 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     } else {
       // Auto: check OPF hints
       verticalMode = epub && epub->isPageProgressionRtl() &&
-                     (epub->getLanguage() == "ja" || epub->getLanguage() == "jpn" ||
-                      epub->getLanguage() == "zh" || epub->getLanguage() == "zho");
+                     (epub->getLanguage() == "ja" || epub->getLanguage() == "jpn" || epub->getLanguage() == "zh" ||
+                      epub->getLanguage() == "zho");
     }
 
     const auto filepath = epub->getSpineItem(currentSpineIndex).href;
@@ -641,10 +639,10 @@ void EpubReaderActivity::render(RenderLock&& lock) {
             verticalMode ? SETTINGS.lineSpacingVertical : SETTINGS.lineSpacingHorizontal, lineCompression,
             viewportWidth, viewportHeight, verticalMode);
 
-    if (!section->loadSectionFile(SETTINGS.getReaderFontId(), lineCompression,
-                                  SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
-                                  viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.firstLineIndent,
-                                  SETTINGS.embeddedStyle, SETTINGS.imageRendering, verticalMode)) {
+    if (!section->loadSectionFile(SETTINGS.getReaderFontId(), lineCompression, SETTINGS.extraParagraphSpacing,
+                                  SETTINGS.paragraphAlignment, viewportWidth, viewportHeight,
+                                  SETTINGS.hyphenationEnabled, SETTINGS.firstLineIndent, SETTINGS.embeddedStyle,
+                                  SETTINGS.imageRendering, verticalMode)) {
       LOG_DBG("ERS", "Cache not found, building...");
 
       // Apply vertical character spacing for layout calculation
@@ -664,11 +662,11 @@ void EpubReaderActivity::render(RenderLock&& lock) {
 
       const int headingFontIds[6] = {SETTINGS.getHeadingFontId(1), SETTINGS.getHeadingFontId(2), 0, 0, 0, 0};
 
-      if (!section->createSectionFile(SETTINGS.getReaderFontId(), lineCompression,
-                                      SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
-                                      viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.firstLineIndent,
-                                      SETTINGS.embeddedStyle, SETTINGS.imageRendering, verticalMode, popupFn,
-                                      headingFontIds, SETTINGS.getTableFontId())) {
+      if (!section->createSectionFile(SETTINGS.getReaderFontId(), lineCompression, SETTINGS.extraParagraphSpacing,
+                                      SETTINGS.paragraphAlignment, viewportWidth, viewportHeight,
+                                      SETTINGS.hyphenationEnabled, SETTINGS.firstLineIndent, SETTINGS.embeddedStyle,
+                                      SETTINGS.imageRendering, verticalMode, popupFn, headingFontIds,
+                                      SETTINGS.getTableFontId())) {
         LOG_ERR("ERS", "Failed to persist page data to SD (free heap: %d)", ESP.getFreeHeap());
         section.reset();
         // Show error and return to home to avoid infinite retry loop
@@ -847,7 +845,8 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   // Font prewarm: scan pass accumulates text, then prewarm, then real render
   auto* fcm = renderer.getFontCacheManager();
   auto scope = fcm->createPrewarmScope();
-  page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop, viewportWidth);  // scan pass
+  page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop,
+               viewportWidth);  // scan pass
   scope.endScanAndPrewarm();
   const auto tPrewarm = millis();
 

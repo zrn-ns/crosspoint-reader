@@ -63,8 +63,7 @@ bool SdCardFontManager::loadFamily(const SdCardFontFamilyInfo& family, GfxRender
   loaded_.push_back({font, 0, basePt});
 
   // Register the same SdCardFont under 4 virtual fontIds (one per target size)
-  EpdFontFamily fontFamily(font->getEpdFont(0), font->getEpdFont(1),
-                           font->getEpdFont(2), font->getEpdFont(3));
+  EpdFontFamily fontFamily(font->getEpdFont(0), font->getEpdFont(1), font->getEpdFont(2), font->getEpdFont(3));
   virtualFontIds_.clear();
 
   for (uint8_t targetPt : ALL_SIZES) {

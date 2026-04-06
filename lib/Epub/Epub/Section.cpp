@@ -73,9 +73,8 @@ void Section::writeSectionFileHeader(const int fontId, const float lineCompressi
 
 bool Section::loadSectionFile(const int fontId, const float lineCompression, const bool extraParagraphSpacing,
                               const uint8_t paragraphAlignment, const uint16_t viewportWidth,
-                              const uint16_t viewportHeight, const bool hyphenationEnabled,
-                              const bool firstLineIndent, const bool embeddedStyle,
-                              const uint8_t imageRendering, const bool verticalMode) {
+                              const uint16_t viewportHeight, const bool hyphenationEnabled, const bool firstLineIndent,
+                              const bool embeddedStyle, const uint8_t imageRendering, const bool verticalMode) {
   if (!Storage.openFileForRead("SCT", filePath, file)) {
     return false;
   }
@@ -151,9 +150,8 @@ bool Section::clearCache() const {
 bool Section::createSectionFile(const int fontId, const float lineCompression, const bool extraParagraphSpacing,
                                 const uint8_t paragraphAlignment, const uint16_t viewportWidth,
                                 const uint16_t viewportHeight, const bool hyphenationEnabled,
-                                const bool firstLineIndent, const bool embeddedStyle,
-                                const uint8_t imageRendering, const bool verticalMode,
-                                const std::function<void()>& popupFn,
+                                const bool firstLineIndent, const bool embeddedStyle, const uint8_t imageRendering,
+                                const bool verticalMode, const std::function<void()>& popupFn,
                                 const int* headingFontIds, const int tableFontId) {
   const auto localPath = epub->getSpineItem(spineIndex).href;
   const auto tmpHtmlPath = epub->getCachePath() + "/.tmp_" + std::to_string(spineIndex) + ".html";

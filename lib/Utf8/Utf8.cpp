@@ -211,16 +211,14 @@ void utf8NfcNormalizeKana(std::string& str) {
            (static_cast<uint8_t>(str[readPos + 2]) & 0x3F);
     } else {
       cp = (lead & 0x07) << 18 | (static_cast<uint8_t>(str[readPos + 1]) & 0x3F) << 12 |
-           (static_cast<uint8_t>(str[readPos + 2]) & 0x3F) << 6 |
-           (static_cast<uint8_t>(str[readPos + 3]) & 0x3F);
+           (static_cast<uint8_t>(str[readPos + 2]) & 0x3F) << 6 | (static_cast<uint8_t>(str[readPos + 3]) & 0x3F);
     }
 
     // 濁点・半濁点を検出し、直前の仮名と合成を試みる
     if (prevCpLen > 0 && (cp == COMBINING_DAKUTEN || cp == COMBINING_HANDAKUTEN)) {
       const auto* table = (cp == COMBINING_DAKUTEN) ? dakutenTable : handakutenTable;
-      const size_t count =
-          (cp == COMBINING_DAKUTEN) ? (sizeof(dakutenTable) / sizeof(dakutenTable[0]))
-                                    : (sizeof(handakutenTable) / sizeof(handakutenTable[0]));
+      const size_t count = (cp == COMBINING_DAKUTEN) ? (sizeof(dakutenTable) / sizeof(dakutenTable[0]))
+                                                     : (sizeof(handakutenTable) / sizeof(handakutenTable[0]));
       uint32_t composed = lookupComposition(prevCp, table, count);
       if (composed != 0) {
         // 直前の文字を合成済みに置換（3バイトBMP同士なのでサイズ不変）

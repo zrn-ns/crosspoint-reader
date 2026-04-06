@@ -17,8 +17,8 @@ class TextBlock final : public Block {
   std::vector<int16_t> wordXpos;
   std::vector<EpdFontFamily::Style> wordStyles;
   BlockStyle blockStyle;
-  std::vector<int16_t> wordYpos;    // vertical layout: y position within column
-  bool isVertical = false;          // true when this block was laid out vertically
+  std::vector<int16_t> wordYpos;  // vertical layout: y position within column
+  bool isVertical = false;        // true when this block was laid out vertically
 
  public:
   explicit TextBlock(std::vector<std::string> words, std::vector<int16_t> word_xpos,

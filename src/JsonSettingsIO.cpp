@@ -195,13 +195,12 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
   }
 
   // Legacy migration: single "lineSpacing" key → split into horizontal/vertical
-  if (!doc["lineSpacing"].isNull() && doc["lineSpacingHorizontal"].isNull() &&
-      doc["lineSpacingVertical"].isNull()) {
+  if (!doc["lineSpacing"].isNull() && doc["lineSpacingHorizontal"].isNull() && doc["lineSpacingVertical"].isNull()) {
     const uint8_t legacy = doc["lineSpacing"] | CrossPointSettings::LINE_SPACING_DEFAULT;
-    const uint8_t clamped = (legacy < CrossPointSettings::LINE_SPACING_MIN)
-                                ? CrossPointSettings::LINE_SPACING_MIN
-                                : ((legacy > CrossPointSettings::LINE_SPACING_MAX) ? CrossPointSettings::LINE_SPACING_MAX
-                                                                                   : legacy);
+    const uint8_t clamped =
+        (legacy < CrossPointSettings::LINE_SPACING_MIN)
+            ? CrossPointSettings::LINE_SPACING_MIN
+            : ((legacy > CrossPointSettings::LINE_SPACING_MAX) ? CrossPointSettings::LINE_SPACING_MAX : legacy);
     s.lineSpacingHorizontal = clamped;
     s.lineSpacingVertical = clamped;
     if (needsResave) *needsResave = true;

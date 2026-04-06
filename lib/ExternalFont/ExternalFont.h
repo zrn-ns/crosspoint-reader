@@ -107,7 +107,7 @@ class ExternalFont {
     uint8_t minX = 0;       // Cached rendering metrics
     uint8_t advanceX = 0;   // Cached advance width
   };
-  CacheEntry* _cache = nullptr;       // Dynamically allocated on load()
+  CacheEntry* _cache = nullptr;  // Dynamically allocated on load()
   uint32_t _accessCounter = 0;
 
   // Sequential read fast path - skip seek if reading consecutive glyphs
@@ -119,7 +119,7 @@ class ExternalFont {
   // -1 = 未使用スロット（プロービング停止）, -2 = トゥームストーン（削除済み、プロービング継続）
   static constexpr int16_t HASH_EMPTY = -1;
   static constexpr int16_t HASH_TOMBSTONE = -2;
-  int16_t* _hashTable = nullptr;      // Dynamically allocated on load()
+  int16_t* _hashTable = nullptr;  // Dynamically allocated on load()
   static int hashCodepoint(uint32_t cp) { return cp % CACHE_SIZE; }
 
   /**

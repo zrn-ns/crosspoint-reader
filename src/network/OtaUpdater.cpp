@@ -199,8 +199,7 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
   const char* preferredAssetName = isTraditionalChineseBuild() ? "firmware-tc.bin" : "firmware-sc.bin";
 
   if (!pickAssetByName(assets, preferredAssetName, &otaUrl, &otaSize) &&
-      !pickAssetByName(assets, "firmware.bin", &otaUrl, &otaSize) &&
-      !pickAnyFirmwareAsset(assets, &otaUrl, &otaSize)) {
+      !pickAssetByName(assets, "firmware.bin", &otaUrl, &otaSize) && !pickAnyFirmwareAsset(assets, &otaUrl, &otaSize)) {
     LOG_ERR("OTA", "No firmware asset found (preferred: %s)", preferredAssetName);
     return NO_UPDATE;
   }

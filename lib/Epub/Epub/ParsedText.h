@@ -1,6 +1,7 @@
 #pragma once
 
 #include <EpdFontFamily.h>
+#include <VerticalTextUtils.h>
 
 #include <functional>
 #include <memory>
@@ -9,7 +10,6 @@
 
 #include "blocks/BlockStyle.h"
 #include "blocks/TextBlock.h"
-#include <VerticalTextUtils.h>
 
 class GfxRenderer;
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <VerticalTextUtils.h>
 #include <expat.h>
 
 #include <climits>
@@ -14,7 +15,6 @@
 #include "../blocks/TextBlock.h"
 #include "../css/CssParser.h"
 #include "../css/CssStyle.h"
-#include <VerticalTextUtils.h>
 
 class Page;
 class GfxRenderer;
@@ -123,8 +123,7 @@ class ChapterHtmlSlimParser {
                                  const bool embeddedStyle, const std::string& contentBase,
                                  const std::string& imageBasePath, const uint8_t imageRendering = 0,
                                  const std::function<void()>& popupFn = nullptr, const CssParser* cssParser = nullptr,
-                                 const int* headingFontIds = nullptr,
-                                 int tableFontId = 0, bool verticalMode = false)
+                                 const int* headingFontIds = nullptr, int tableFontId = 0, bool verticalMode = false)
 
       : epub(epub),
         filepath(filepath),

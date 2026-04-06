@@ -16,8 +16,8 @@ struct SideLayoutMap {
 // position). The mapping below accounts for this so that PREV_NEXT means
 // "from top to bottom: previous page, next page".
 constexpr SideLayoutMap kSideLayouts[] = {
-    {HalGPIO::BTN_DOWN, HalGPIO::BTN_UP},   // PREV_NEXT: top(DOWN)=prev, bottom(UP)=next
-    {HalGPIO::BTN_UP, HalGPIO::BTN_DOWN},   // NEXT_PREV: top(DOWN)=next, bottom(UP)=prev
+    {HalGPIO::BTN_DOWN, HalGPIO::BTN_UP},  // PREV_NEXT: top(DOWN)=prev, bottom(UP)=next
+    {HalGPIO::BTN_UP, HalGPIO::BTN_DOWN},  // NEXT_PREV: top(DOWN)=next, bottom(UP)=prev
 };
 
 // Mirror a front button hardware index (0<->3, 1<->2) for inverted orientation.

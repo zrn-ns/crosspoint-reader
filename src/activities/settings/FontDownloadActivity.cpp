@@ -1,13 +1,12 @@
 #include "FontDownloadActivity.h"
 
 #include <ArduinoJson.h>
+#include <FontManager.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
 #include <WiFi.h>
-
-#include <FontManager.h>
 
 #include "MappedInputManager.h"
 #include "SdCardFontGlobals.h"

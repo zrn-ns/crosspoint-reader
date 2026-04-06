@@ -2,6 +2,7 @@
 
 #include <ArduinoJson.h>
 #include <Epub.h>
+#include <FontManager.h>
 #include <FsHelpers.h>
 #include <HalStorage.h>
 #include <Logging.h>
@@ -19,7 +20,6 @@
 #include "SettingsList.h"
 #include "WebDAVHandler.h"
 #include "WifiCredentialStore.h"
-#include <FontManager.h>
 #include "html/FilesPageHtml.generated.h"
 #include "html/FontsPageHtml.generated.h"
 #include "html/HomePageHtml.generated.h"
@@ -93,9 +93,7 @@ bool isProtectedItemName(const char* name) {
   return false;
 }
 
-bool isProtectedItemName(const String& name) {
-  return isProtectedItemName(name.c_str());
-}
+bool isProtectedItemName(const String& name) { return isProtectedItemName(name.c_str()); }
 
 bool endsWithIgnoreCase(const char* value, const char* suffix) {
   if (value == nullptr || suffix == nullptr) {
@@ -191,17 +189,11 @@ size_t appendEscapedJsonString(char* output, const size_t outputSize, const char
   return outPos;
 }
 
-bool isReaderFontFamilySetting(const SettingInfo& s) {
-  return s.key != nullptr && strcmp(s.key, "fontFamily") == 0;
-}
+bool isReaderFontFamilySetting(const SettingInfo& s) { return s.key != nullptr && strcmp(s.key, "fontFamily") == 0; }
 
-bool isUiFontFamilyKey(const char* key) {
-  return key != nullptr && strcmp(key, "uiFontFamily") == 0;
-}
+bool isUiFontFamilyKey(const char* key) { return key != nullptr && strcmp(key, "uiFontFamily") == 0; }
 
-bool isLanguageSettingKey(const char* key) {
-  return key != nullptr && strcmp(key, "language") == 0;
-}
+bool isLanguageSettingKey(const char* key) { return key != nullptr && strcmp(key, "language") == 0; }
 }  // namespace
 
 // File listing page template - now using generated headers:
@@ -572,8 +564,7 @@ void CrossPointWebServer::handleFileListData() const {
       return;
     }
 
-    const int written = snprintf(output, outputSize,
-                                 "{\"name\":\"%s\",\"size\":%llu,\"isDirectory\":%s,\"isEpub\":%s}",
+    const int written = snprintf(output, outputSize, "{\"name\":\"%s\",\"size\":%llu,\"isDirectory\":%s,\"isEpub\":%s}",
                                  escapedName, static_cast<unsigned long long>(info.size),
                                  info.isDirectory ? "true" : "false", info.isEpub ? "true" : "false");
     if (written < 0 || static_cast<size_t>(written) >= outputSize) {

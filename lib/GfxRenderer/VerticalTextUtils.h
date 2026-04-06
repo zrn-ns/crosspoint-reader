@@ -26,38 +26,37 @@ struct PunctuationOffset {
 // dx/dyEighths are post-rotation fine-tuning offsets (usually 0).
 static constexpr PunctuationOffset VERTICAL_PUNCTUATION[] = {
     // Punctuation - rotate to reposition from horizontal to vertical placement
-    {0x3001, 0, 0, true},     // 、 ideographic comma
-    {0x3002, 0, 0, true},     // 。 ideographic period
-    {0xFF0C, 0, 0, true},     // ， fullwidth comma
-    {0xFF0E, 0, 0, true},     // ． fullwidth period
-    {0xFF01, 0, 0, true},     // ！ fullwidth exclamation
-    {0xFF1F, 0, 0, true},     // ？ fullwidth question mark
-    {0xFF1A, 0, 0, true},     // ： fullwidth colon
-    {0xFF1B, 0, 0, true},     // ； fullwidth semicolon
+    {0x3001, 0, 0, true},  // 、 ideographic comma
+    {0x3002, 0, 0, true},  // 。 ideographic period
+    {0xFF0C, 0, 0, true},  // ， fullwidth comma
+    {0xFF0E, 0, 0, true},  // ． fullwidth period
+    {0xFF01, 0, 0, true},  // ！ fullwidth exclamation
+    {0xFF1F, 0, 0, true},  // ？ fullwidth question mark
+    {0xFF1A, 0, 0, true},  // ： fullwidth colon
+    {0xFF1B, 0, 0, true},  // ； fullwidth semicolon
     // Brackets - rotate so opening/closing direction matches vertical flow
-    {0x300C, 0, 0, true},     // 「 left corner bracket
-    {0x300D, 0, 0, true},     // 」 right corner bracket
-    {0x300E, 0, 0, true},     // 『 left white corner bracket
-    {0x300F, 0, 0, true},     // 』 right white corner bracket
-    {0x3010, 0, 0, true},     // 【 left black lenticular bracket
-    {0x3011, 0, 0, true},     // 】 right black lenticular bracket
-    {0xFF08, 0, 0, true},     // （ fullwidth left paren
-    {0xFF09, 0, 0, true},     // ） fullwidth right paren
-    {0x3008, 0, 0, true},     // 〈 left angle bracket
-    {0x3009, 0, 0, true},     // 〉 right angle bracket
-    {0x300A, 0, 0, true},     // 《 left double angle bracket
-    {0x300B, 0, 0, true},     // 》 right double angle bracket
-    {0x3014, 0, 0, true},     // 〔 left tortoise shell bracket
-    {0x3015, 0, 0, true},     // 〕 right tortoise shell bracket
+    {0x300C, 0, 0, true},  // 「 left corner bracket
+    {0x300D, 0, 0, true},  // 」 right corner bracket
+    {0x300E, 0, 0, true},  // 『 left white corner bracket
+    {0x300F, 0, 0, true},  // 』 right white corner bracket
+    {0x3010, 0, 0, true},  // 【 left black lenticular bracket
+    {0x3011, 0, 0, true},  // 】 right black lenticular bracket
+    {0xFF08, 0, 0, true},  // （ fullwidth left paren
+    {0xFF09, 0, 0, true},  // ） fullwidth right paren
+    {0x3008, 0, 0, true},  // 〈 left angle bracket
+    {0x3009, 0, 0, true},  // 〉 right angle bracket
+    {0x300A, 0, 0, true},  // 《 left double angle bracket
+    {0x300B, 0, 0, true},  // 》 right double angle bracket
+    {0x3014, 0, 0, true},  // 〔 left tortoise shell bracket
+    {0x3015, 0, 0, true},  // 〕 right tortoise shell bracket
     // Long marks - rotate to vertical orientation
-    {0x30FC, 0, 0, true},     // ー katakana long vowel mark
-    {0x2014, 0, 0, true},     // — em dash
-    {0x2015, 0, 0, true},     // ― horizontal bar
-    {0x2026, 0, 0, true},     // … ellipsis
-    {0xFF5E, 0, 0, true},     // ～ fullwidth tilde
+    {0x30FC, 0, 0, true},  // ー katakana long vowel mark
+    {0x2014, 0, 0, true},  // — em dash
+    {0x2015, 0, 0, true},  // ― horizontal bar
+    {0x2026, 0, 0, true},  // … ellipsis
+    {0xFF5E, 0, 0, true},  // ～ fullwidth tilde
 };
-static constexpr int VERTICAL_PUNCTUATION_COUNT =
-    sizeof(VERTICAL_PUNCTUATION) / sizeof(VERTICAL_PUNCTUATION[0]);
+static constexpr int VERTICAL_PUNCTUATION_COUNT = sizeof(VERTICAL_PUNCTUATION) / sizeof(VERTICAL_PUNCTUATION[0]);
 
 // Look up punctuation offset. Returns nullptr if no special handling needed.
 inline const PunctuationOffset* getVerticalPunctuationOffset(uint32_t cp) {
@@ -70,17 +69,17 @@ inline const PunctuationOffset* getVerticalPunctuationOffset(uint32_t cp) {
 // Determine if a codepoint should be drawn upright in vertical text.
 // CJK ideographs, kana, CJK symbols, fullwidth forms, etc.
 inline bool isUprightInVertical(uint32_t cp) {
-  if (cp >= 0x4E00 && cp <= 0x9FFF) return true;   // CJK Unified Ideographs
-  if (cp >= 0x3400 && cp <= 0x4DBF) return true;   // CJK Extension A
-  if (cp >= 0x3040 && cp <= 0x309F) return true;   // Hiragana
-  if (cp >= 0x30A0 && cp <= 0x30FF) return true;   // Katakana
-  if (cp >= 0x3000 && cp <= 0x303F) return true;   // CJK Symbols and Punctuation
-  if (cp >= 0xFF00 && cp <= 0xFFEF) return true;   // Fullwidth Forms
-  if (cp >= 0xF900 && cp <= 0xFAFF) return true;   // CJK Compatibility Ideographs
-  if (cp >= 0x3200 && cp <= 0x32FF) return true;   // Enclosed CJK Letters
-  if (cp >= 0x3300 && cp <= 0x33FF) return true;   // CJK Compatibility
-  if (cp >= 0x3100 && cp <= 0x312F) return true;   // Bopomofo
-  if (cp >= 0xAC00 && cp <= 0xD7AF) return true;   // Hangul
+  if (cp >= 0x4E00 && cp <= 0x9FFF) return true;  // CJK Unified Ideographs
+  if (cp >= 0x3400 && cp <= 0x4DBF) return true;  // CJK Extension A
+  if (cp >= 0x3040 && cp <= 0x309F) return true;  // Hiragana
+  if (cp >= 0x30A0 && cp <= 0x30FF) return true;  // Katakana
+  if (cp >= 0x3000 && cp <= 0x303F) return true;  // CJK Symbols and Punctuation
+  if (cp >= 0xFF00 && cp <= 0xFFEF) return true;  // Fullwidth Forms
+  if (cp >= 0xF900 && cp <= 0xFAFF) return true;  // CJK Compatibility Ideographs
+  if (cp >= 0x3200 && cp <= 0x32FF) return true;  // Enclosed CJK Letters
+  if (cp >= 0x3300 && cp <= 0x33FF) return true;  // CJK Compatibility
+  if (cp >= 0x3100 && cp <= 0x312F) return true;  // Bopomofo
+  if (cp >= 0xAC00 && cp <= 0xD7AF) return true;  // Hangul
   return false;
 }
 
@@ -91,23 +90,23 @@ inline bool isUprightInVertical(uint32_t cp) {
 // a full shaping engine), and bitmap-only substitution looks wrong.
 inline bool shouldUseVertGlyph(uint32_t cp) {
   // CJK punctuation and brackets (3000-303F), excluding ideographs like 〆(3006)
-  if (cp == 0x3001 || cp == 0x3002) return true;                     // 、。
-  if (cp >= 0x3008 && cp <= 0x3011) return true;                     // 〈〉《》「」『』【】
-  if (cp >= 0x3014 && cp <= 0x301B) return true;                     // 〔〕〖〗〘〙〚〛
-  if (cp >= 0x301D && cp <= 0x301F) return true;                     // 〝〞〟
+  if (cp == 0x3001 || cp == 0x3002) return true;  // 、。
+  if (cp >= 0x3008 && cp <= 0x3011) return true;  // 〈〉《》「」『』【】
+  if (cp >= 0x3014 && cp <= 0x301B) return true;  // 〔〕〖〗〘〙〚〛
+  if (cp >= 0x301D && cp <= 0x301F) return true;  // 〝〞〟
   // Fullwidth punctuation and brackets
-  if (cp == 0xFF01 || cp == 0xFF1F) return true;                     // ！？
-  if (cp == 0xFF08 || cp == 0xFF09) return true;                     // （）
-  if (cp == 0xFF0C || cp == 0xFF0E) return true;                     // ，．
-  if (cp == 0xFF1A || cp == 0xFF1B) return true;                     // ：；
-  if (cp == 0xFF3B || cp == 0xFF3D) return true;                     // ［］
-  if (cp == 0xFF5B || cp == 0xFF5D) return true;                     // ｛｝
-  if (cp == 0xFF5E) return true;                                     // ～
+  if (cp == 0xFF01 || cp == 0xFF1F) return true;  // ！？
+  if (cp == 0xFF08 || cp == 0xFF09) return true;  // （）
+  if (cp == 0xFF0C || cp == 0xFF0E) return true;  // ，．
+  if (cp == 0xFF1A || cp == 0xFF1B) return true;  // ：；
+  if (cp == 0xFF3B || cp == 0xFF3D) return true;  // ［］
+  if (cp == 0xFF5B || cp == 0xFF5D) return true;  // ｛｝
+  if (cp == 0xFF5E) return true;                  // ～
   // Long marks and dashes
-  if (cp == 0x30FC) return true;                                     // ー
-  if (cp == 0x2014 || cp == 0x2015) return true;                     // —―
-  if (cp == 0x2025 || cp == 0x2026) return true;                     // ‥…
-  if (cp == 0x22EF) return true;                                     // ⋯
+  if (cp == 0x30FC) return true;                  // ー
+  if (cp == 0x2014 || cp == 0x2015) return true;  // —―
+  if (cp == 0x2025 || cp == 0x2026) return true;  // ‥…
+  if (cp == 0x22EF) return true;                  // ⋯
   return false;
 }
 
@@ -115,30 +114,30 @@ inline bool shouldUseVertGlyph(uint32_t cp) {
 // Returns true if this codepoint must NOT appear at the start of a column.
 inline bool isKinsokuHead(uint32_t cp) {
   // Closing brackets and punctuation (行頭禁止)
-  if (cp == 0x3001 || cp == 0x3002) return true;  // 、。
-  if (cp == 0x300D || cp == 0x300F || cp == 0x3011) return true;  // 」』】
+  if (cp == 0x3001 || cp == 0x3002) return true;                                  // 、。
+  if (cp == 0x300D || cp == 0x300F || cp == 0x3011) return true;                  // 」』】
   if (cp == 0x3015 || cp == 0x3017 || cp == 0x3019 || cp == 0x301B) return true;  // 〕〗〙〛
-  if (cp == 0xFF09 || cp == 0xFF3D || cp == 0xFF5D) return true;  // ）］｝
-  if (cp == 0xFF0C || cp == 0xFF0E) return true;  // ，．
-  if (cp == 0xFF01 || cp == 0xFF1F) return true;  // ！？
-  if (cp == 0xFF1A || cp == 0xFF1B) return true;  // ：；
-  if (cp == 0x3009 || cp == 0x300B) return true;  // 〉》
+  if (cp == 0xFF09 || cp == 0xFF3D || cp == 0xFF5D) return true;                  // ）］｝
+  if (cp == 0xFF0C || cp == 0xFF0E) return true;                                  // ，．
+  if (cp == 0xFF01 || cp == 0xFF1F) return true;                                  // ！？
+  if (cp == 0xFF1A || cp == 0xFF1B) return true;                                  // ：；
+  if (cp == 0x3009 || cp == 0x300B) return true;                                  // 〉》
   // Small kana (行頭禁止)
   if (cp == 0x3041 || cp == 0x3043 || cp == 0x3045 || cp == 0x3047 || cp == 0x3049) return true;  // ぁぃぅぇぉ
-  if (cp == 0x3063 || cp == 0x3083 || cp == 0x3085 || cp == 0x3087) return true;  // っゃゅょ
+  if (cp == 0x3063 || cp == 0x3083 || cp == 0x3085 || cp == 0x3087) return true;                  // っゃゅょ
   if (cp == 0x30A1 || cp == 0x30A3 || cp == 0x30A5 || cp == 0x30A7 || cp == 0x30A9) return true;  // ァィゥェォ
-  if (cp == 0x30C3 || cp == 0x30E3 || cp == 0x30E5 || cp == 0x30E7) return true;  // ッャュョ
-  if (cp == 0x30FC) return true;  // ー
+  if (cp == 0x30C3 || cp == 0x30E3 || cp == 0x30E5 || cp == 0x30E7) return true;                  // ッャュョ
+  if (cp == 0x30FC) return true;                                                                  // ー
   return false;
 }
 
 // Returns true if this codepoint must NOT appear at the end of a column.
 inline bool isKinsokuTail(uint32_t cp) {
   // Opening brackets (行末禁止)
-  if (cp == 0x300C || cp == 0x300E || cp == 0x3010) return true;  // 「『【
+  if (cp == 0x300C || cp == 0x300E || cp == 0x3010) return true;                  // 「『【
   if (cp == 0x3014 || cp == 0x3016 || cp == 0x3018 || cp == 0x301A) return true;  // 〔〖〘〚
-  if (cp == 0xFF08 || cp == 0xFF3B || cp == 0xFF5B) return true;  // （［｛
-  if (cp == 0x3008 || cp == 0x300A) return true;  // 〈《
+  if (cp == 0xFF08 || cp == 0xFF3B || cp == 0xFF5B) return true;                  // （［｛
+  if (cp == 0x3008 || cp == 0x300A) return true;                                  // 〈《
   return false;
 }
 

@@ -97,7 +97,6 @@ void FileBrowserActivity::loadFiles() {
     } else {
       std::string_view filename{name};
       if (FsHelpers::hasEpubExtension(filename) || FsHelpers::hasXtcExtension(filename) ||
-          FsHelpers::hasTxtExtension(filename) || FsHelpers::hasMarkdownExtension(filename) ||
           FsHelpers::hasBmpExtension(filename)) {
         // Store original (NFD) filename for path construction.
         // NFC normalization is done at display time only.

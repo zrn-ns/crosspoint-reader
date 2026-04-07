@@ -3,11 +3,14 @@
 #include <I18n.h>
 
 #include "../../components/UITheme.h"
+#include "../ActivityResult.h"
 #include "HalDisplay.h"
 
 ConfirmationActivity::ConfirmationActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                           const std::string& heading, const std::string& body)
-    : Activity("Confirmation", renderer, mappedInput), heading(heading), body(body) {}
+                                           const std::string& heading, const std::string& body,
+                                           const std::string& neverLabel, const std::string& confirmLabel)
+    : Activity("Confirmation", renderer, mappedInput), heading(heading), body(body), neverLabel(neverLabel),
+      confirmLabel(confirmLabel) {}
 
 void ConfirmationActivity::onEnter() {
   Activity::onEnter();
@@ -49,7 +52,10 @@ void ConfirmationActivity::render(RenderLock&& lock) {
   }
 
   // Draw UI Elements
-  const auto labels = mappedInput.mapLabels("", "", I18N.get(StrId::STR_CANCEL), I18N.get(StrId::STR_CONFIRM));
+  const char* confirmText = confirmLabel.empty() ? I18N.get(StrId::STR_CONFIRM) : confirmLabel.c_str();
+  const auto labels = neverLabel.empty()
+      ? mappedInput.mapLabels("", "", I18N.get(StrId::STR_CANCEL), confirmText)
+      : mappedInput.mapLabels(I18N.get(StrId::STR_CLOSE_BOOK), "", neverLabel.c_str(), confirmText);
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer(HalDisplay::RefreshMode::FAST_REFRESH);
@@ -65,6 +71,24 @@ void ConfirmationActivity::loop() {
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Left)) {
+    if (!neverLabel.empty()) {
+      // "Never" option (don't ask again)
+      ActivityResult res;
+      res.isCancelled = true;
+      res.data = MenuResult{RESULT_NEVER};
+      setResult(std::move(res));
+    } else {
+      // Standard cancel
+      ActivityResult res;
+      res.isCancelled = true;
+      setResult(std::move(res));
+    }
+    finish();
+    return;
+  }
+
+  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+    // Close / cancel
     ActivityResult res;
     res.isCancelled = true;
     setResult(std::move(res));

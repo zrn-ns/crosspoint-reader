@@ -100,6 +100,21 @@ void EpubReaderActivity::pregenerateCache() {
   renderer.displayBuffer(HalDisplay::FAST_REFRESH);
 
   for (int i = 0; i < spineCount; i++) {
+    // Check for cancel by reading raw ADC values directly.
+    // The InputManager's debounce mechanism requires multiple update() calls
+    // spaced apart, which doesn't work well in a tight loop. Reading ADC
+    // directly bypasses debounce — acceptable here since we only need a
+    // coarse "any button pressed?" check, not precise button identification.
+    {
+      const int adc1 = analogRead(1);  // Front buttons (ADC pin 1)
+      const int adc2 = analogRead(2);  // Side buttons (ADC pin 2)
+      constexpr int ADC_NO_BUTTON = 3800;
+      if (adc1 < ADC_NO_BUTTON || adc2 < ADC_NO_BUTTON) {
+        LOG_DBG("ERS", "Pregenerate cancelled at section %d/%d", i, spineCount);
+        break;
+      }
+    }
+
     // Update progress
     const int progress = (i * 100) / spineCount;
     GUI.fillPopupProgress(renderer, popupRect, progress);
@@ -196,15 +211,30 @@ void EpubReaderActivity::onEnter() {
 
   // Check if section cache exists; offer to pregenerate if missing
   const std::string firstSectionPath = epub->getCachePath() + "/sections/0.bin";
-  if (!Storage.exists(firstSectionPath.c_str())) {
-    auto handler = [this](const ActivityResult& res) {
+  const std::string noCachePromptPath = epub->getCachePath() + "/.no_cache_prompt";
+  if (!Storage.exists(firstSectionPath.c_str()) && !Storage.exists(noCachePromptPath.c_str())) {
+    auto handler = [this, noCachePromptPath](const ActivityResult& res) {
       if (!res.isCancelled) {
+        // "生成" — generate cache and continue
         pregenerateCache();
+        requestUpdate();
+      } else if (auto* menu = std::get_if<MenuResult>(&res.data)) {
+        if (menu->action == ConfirmationActivity::RESULT_NEVER) {
+          // "しない" — write flag file so we never ask again, then continue
+          FsFile f;
+          if (Storage.openFileForWrite("ERS", noCachePromptPath, f)) {
+            f.close();
+          }
+          requestUpdate();
+        }
+      } else {
+        // "閉じる" — close the book and go home
+        onGoHome();
       }
-      requestUpdate();
     };
     startActivityForResult(
-        std::make_unique<ConfirmationActivity>(renderer, mappedInput, tr(STR_GENERATE_CACHE), epub->getTitle()),
+        std::make_unique<ConfirmationActivity>(renderer, mappedInput, tr(STR_GENERATE_CACHE), epub->getTitle(),
+                                               tr(STR_SKIP_CACHE), tr(STR_GENERATE)),
         handler);
     return;
   }

@@ -17,12 +17,18 @@ class ConfirmationActivity : public Activity {
 
   std::string safeHeading;
   std::string safeBody;
+  std::string neverLabel;
+  std::string confirmLabel;
   int startY = 0;
   int lineHeight = 0;
 
  public:
+  // resultCode in ActivityResult::data: 0=confirm, 1=cancel, 2=never
+  static constexpr int RESULT_NEVER = 2;
+
   ConfirmationActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& heading,
-                       const std::string& body);
+                       const std::string& body, const std::string& neverLabel = "",
+                       const std::string& confirmLabel = "");
 
   void onEnter() override;
   void loop() override;

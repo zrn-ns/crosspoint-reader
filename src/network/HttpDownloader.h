@@ -40,5 +40,5 @@ class HttpDownloader {
    * @return DownloadError indicating success or failure type
    */
   static DownloadError downloadToFile(const std::string& url, const std::string& destPath,
-                                      ProgressCallback progress = nullptr);
+                                      ProgressCallback progress = nullptr, int timeoutMs = 0);
 };

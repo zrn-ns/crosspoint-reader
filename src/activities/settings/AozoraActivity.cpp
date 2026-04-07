@@ -137,16 +137,29 @@ static constexpr const char* API_TMP_FILE = "/aozora_api.tmp";
 
 static std::string lastApiError_;
 
+static constexpr int API_MAX_RETRIES = 3;
+
 static bool fetchApiJson(const char* url, JsonDocument& doc) {
   LOG_DBG("AOZORA", "API call: %s (heap=%d)", url, ESP.getFreeHeap());
-  auto result = HttpDownloader::downloadToFile(url, API_TMP_FILE, nullptr);
+
+  HttpDownloader::DownloadError result = HttpDownloader::HTTP_ERROR;
+  for (int attempt = 0; attempt < API_MAX_RETRIES; attempt++) {
+    if (attempt > 0) {
+      LOG_DBG("AOZORA", "Retry %d/%d", attempt + 1, API_MAX_RETRIES);
+      delay(1000);
+    }
+    result = HttpDownloader::downloadToFile(url, API_TMP_FILE, nullptr, 30000);
+    if (result == HttpDownloader::OK) break;
+    LOG_ERR("AOZORA", "API fetch attempt %d failed: err=%d http=%d", attempt + 1, result,
+            HttpDownloader::lastHttpCode);
+    Storage.remove(API_TMP_FILE);
+  }
+
   if (result != HttpDownloader::OK) {
-    LOG_ERR("AOZORA", "API fetch failed: err=%d http=%d url=%s", result, HttpDownloader::lastHttpCode, url);
     char buf[128];
     snprintf(buf, sizeof(buf), "err=%d http=%d heap=%dKB", static_cast<int>(result), HttpDownloader::lastHttpCode,
              ESP.getFreeHeap() / 1024);
     lastApiError_ = buf;
-    Storage.remove(API_TMP_FILE);
     return false;
   }
 
@@ -272,7 +285,8 @@ bool AozoraActivity::downloadBook() {
                                                  downloadProgress_ = downloaded;
                                                  downloadTotal_ = total;
                                                  requestUpdate(true);
-                                               });
+                                               },
+                                               30000);
 
   if (result != HttpDownloader::OK) {
     LOG_ERR("AOZORA", "Download failed: err=%d http=%d", static_cast<int>(result), HttpDownloader::lastHttpCode);

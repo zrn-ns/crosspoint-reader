@@ -167,7 +167,7 @@ bool HttpDownloader::fetchUrl(const std::string& url, std::string& outContent) {
 }
 
 HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& url, const std::string& destPath,
-                                                             ProgressCallback progress) {
+                                                             ProgressCallback progress, int timeoutMs) {
   // Use NetworkClientSecure for HTTPS, regular NetworkClient for HTTP
   std::unique_ptr<NetworkClient> client;
   if (UrlUtils::isHttpsUrl(url)) {
@@ -185,6 +185,9 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
 
   http.begin(*client, url.c_str());
   http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+  if (timeoutMs > 0) {
+    http.setTimeout(timeoutMs);
+  }
   http.addHeader("User-Agent", "CrossPoint-ESP32-" CROSSPOINT_VERSION);
 
   // Add Basic HTTP auth if credentials are configured

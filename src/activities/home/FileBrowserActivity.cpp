@@ -91,17 +91,17 @@ void FileBrowserActivity::loadFiles() {
     }
 
     if (file.isDirectory()) {
-      std::string dirName = std::string(name) + "/";
-      utf8NfcNormalizeKana(dirName);
-      files.emplace_back(std::move(dirName));
+      // Store original (NFD) directory name for path construction.
+      // NFC normalization is done at display time only.
+      files.emplace_back(std::string(name) + "/");
     } else {
       std::string_view filename{name};
       if (FsHelpers::hasEpubExtension(filename) || FsHelpers::hasXtcExtension(filename) ||
           FsHelpers::hasTxtExtension(filename) || FsHelpers::hasMarkdownExtension(filename) ||
           FsHelpers::hasBmpExtension(filename)) {
-        std::string normalized(filename);
-        utf8NfcNormalizeKana(normalized);
-        files.emplace_back(std::move(normalized));
+        // Store original (NFD) filename for path construction.
+        // NFC normalization is done at display time only.
+        files.emplace_back(filename);
       }
     }
     file.close();
@@ -243,6 +243,8 @@ void FileBrowserActivity::loop() {
 }
 
 std::string getFileName(std::string filename) {
+  // NFC normalize for display (original NFD path is preserved in files[] for SD card access)
+  utf8NfcNormalizeKana(filename);
   if (filename.back() == '/') {
     filename.pop_back();
     if (!UITheme::getInstance().getTheme().showsFileIcons()) {
@@ -262,6 +264,7 @@ void FileBrowserActivity::render(RenderLock&&) {
   const auto& metrics = UITheme::getInstance().getMetrics();
 
   std::string folderName = (basepath == "/") ? tr(STR_SD_CARD) : basepath.substr(basepath.rfind('/') + 1);
+  utf8NfcNormalizeKana(folderName);
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, folderName.c_str());
 
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;

@@ -24,6 +24,7 @@ enum class SettingAction {
   DownloadFonts,
   SelectUiFont,
   GenerateAllCache,
+  AozoraBunko,
 };
 
 struct SettingInfo {

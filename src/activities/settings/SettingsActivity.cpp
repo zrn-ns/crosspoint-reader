@@ -10,6 +10,7 @@
 #include "CalibreSettingsActivity.h"
 #include "ClearCacheActivity.h"
 #include "CrossPointSettings.h"
+#include "AozoraActivity.h"
 #include "GenerateAllCacheActivity.h"
 #include "FontDownloadActivity.h"
 #include "FontSelectActivity.h"
@@ -57,6 +58,7 @@ void SettingsActivity::rebuildSettingsLists() {
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CLEAR_READING_CACHE, SettingAction::ClearCache));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_GENERATE_ALL_CACHE, SettingAction::GenerateAllCache));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_DOWNLOAD_FONTS, SettingAction::DownloadFonts));
+  systemSettings.push_back(SettingInfo::Action(StrId::STR_AOZORA_BUNKO, SettingAction::AozoraBunko));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_LANGUAGE, SettingAction::Language));
   // Insert "Download Fonts" right after the font family setting so users discover it naturally
@@ -297,6 +299,10 @@ void SettingsActivity::toggleCurrentSetting() {
                                  SETTINGS.saveToFile();
                                  rebuildSettingsLists();
                                });
+        break;
+      case SettingAction::AozoraBunko:
+        startActivityForResult(std::make_unique<AozoraActivity>(renderer, mappedInput),
+                               [this](const ActivityResult&) { SETTINGS.saveToFile(); });
         break;
       case SettingAction::Language:
         startActivityForResult(std::make_unique<LanguageSelectActivity>(renderer, mappedInput), resultHandler);

@@ -429,9 +429,14 @@ bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePat
   int destWidth, destHeight;
 
   if (config.useExactDimensions && config.maxWidth > 0 && config.maxHeight > 0) {
-    destWidth = config.maxWidth;
-    destHeight = config.maxHeight;
-    targetScale = (float)destWidth / srcWidth;
+    // Fit image within the exact target bounds while preserving aspect ratio.
+    // The single fineScaleFP used in the draw callback requires uniform X/Y scaling;
+    // non-uniform scaling would cause diagonal distortion.
+    float scaleX = (float)config.maxWidth / srcWidth;
+    float scaleY = (float)config.maxHeight / srcHeight;
+    targetScale = (scaleX < scaleY) ? scaleX : scaleY;
+    destWidth = (int)(srcWidth * targetScale + 0.5f);
+    destHeight = (int)(srcHeight * targetScale + 0.5f);
   } else {
     float scaleX = (config.maxWidth > 0 && srcWidth > config.maxWidth) ? (float)config.maxWidth / srcWidth : 1.0f;
     float scaleY = (config.maxHeight > 0 && srcHeight > config.maxHeight) ? (float)config.maxHeight / srcHeight : 1.0f;

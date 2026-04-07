@@ -323,10 +323,14 @@ bool PngToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
   ctx.srcHeight = png->getHeight();
 
   if (config.useExactDimensions && config.maxWidth > 0 && config.maxHeight > 0) {
-    // Use exact dimensions as specified (avoids rounding mismatches with pre-calculated sizes)
-    ctx.dstWidth = config.maxWidth;
-    ctx.dstHeight = config.maxHeight;
-    ctx.scale = (float)ctx.dstWidth / ctx.srcWidth;
+    // Fit image within the exact target bounds while preserving aspect ratio.
+    // The single ctx.scale used for row mapping requires uniform X/Y scaling;
+    // non-uniform scaling would cause diagonal distortion.
+    float scaleX = (float)config.maxWidth / ctx.srcWidth;
+    float scaleY = (float)config.maxHeight / ctx.srcHeight;
+    ctx.scale = (scaleX < scaleY) ? scaleX : scaleY;
+    ctx.dstWidth = (int)(ctx.srcWidth * ctx.scale + 0.5f);
+    ctx.dstHeight = (int)(ctx.srcHeight * ctx.scale + 0.5f);
   } else {
     // Calculate scale factor to fit within maxWidth/maxHeight
     float scaleX = (float)config.maxWidth / ctx.srcWidth;

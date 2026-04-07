@@ -11,13 +11,15 @@ struct SideLayoutMap {
 };
 
 // Order matches CrossPointSettings::SIDE_BUTTON_LAYOUT.
-// NOTE: On CrossPoint X4 hardware, BTN_DOWN(5) is the physical UPPER button
-// and BTN_UP(4) is the physical LOWER button (ADC channel ordering ≠ physical
-// position). The mapping below accounts for this so that PREV_NEXT means
-// "from top to bottom: previous page, next page".
-constexpr SideLayoutMap kSideLayouts[] = {
+// X4: BTN_DOWN(5) is physically UPPER, BTN_UP(4) is physically LOWER.
+// X3: BTN_UP(4) is physically UPPER, BTN_DOWN(5) is physically LOWER (normal).
+constexpr SideLayoutMap kSideLayoutsX4[] = {
     {HalGPIO::BTN_DOWN, HalGPIO::BTN_UP},  // PREV_NEXT: top(DOWN)=prev, bottom(UP)=next
-    {HalGPIO::BTN_UP, HalGPIO::BTN_DOWN},  // NEXT_PREV: top(DOWN)=next, bottom(UP)=prev
+    {HalGPIO::BTN_UP, HalGPIO::BTN_DOWN},  // NEXT_PREV
+};
+constexpr SideLayoutMap kSideLayoutsX3[] = {
+    {HalGPIO::BTN_UP, HalGPIO::BTN_DOWN},  // PREV_NEXT: top(UP)=prev, bottom(DOWN)=next
+    {HalGPIO::BTN_DOWN, HalGPIO::BTN_UP},  // NEXT_PREV
 };
 
 // Mirror a front button hardware index (0<->3, 1<->2) for inverted orientation.
@@ -27,7 +29,7 @@ constexpr ButtonIndex mirrorFront(ButtonIndex idx) { return 3 - idx; }
 
 bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint8_t) const) const {
   const auto sideLayout = static_cast<CrossPointSettings::SIDE_BUTTON_LAYOUT>(SETTINGS.sideButtonLayout);
-  const auto& side = kSideLayouts[sideLayout];
+  const auto& side = gpio.deviceIsX3() ? kSideLayoutsX3[sideLayout] : kSideLayoutsX4[sideLayout];
   const bool inverted = effectiveOrientation == Orientation::PortraitInverted;
   const bool landscapeCW = effectiveOrientation == Orientation::LandscapeClockwise;
   const bool landscapeCCW = effectiveOrientation == Orientation::LandscapeCounterClockwise;

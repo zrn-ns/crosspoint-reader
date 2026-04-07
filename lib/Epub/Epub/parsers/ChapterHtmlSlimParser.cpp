@@ -369,6 +369,25 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
           // Resolve the image path relative to the HTML file
           std::string resolvedPath = FsHelpers::normalisePath(self->contentBase + src);
 
+          // If format is not directly supported (e.g. SVG), try same-name fallback
+          // with supported extensions (.png, .jpg, .jpeg)
+          if (!ImageDecoderFactory::isFormatSupported(resolvedPath)) {
+            const size_t dotPos = resolvedPath.rfind('.');
+            if (dotPos != std::string::npos) {
+              const std::string baseName = resolvedPath.substr(0, dotPos);
+              static const char* fallbackExts[] = {".png", ".jpg", ".jpeg"};
+              for (const auto* ext : fallbackExts) {
+                const std::string candidate = baseName + ext;
+                size_t candidateSize = 0;
+                if (self->epub->getItemSize(candidate, &candidateSize) && candidateSize > 0) {
+                  LOG_DBG("EHP", "Using fallback image: %s -> %s", resolvedPath.c_str(), candidate.c_str());
+                  resolvedPath = candidate;
+                  break;
+                }
+              }
+            }
+          }
+
           if (ImageDecoderFactory::isFormatSupported(resolvedPath)) {
             // Create a unique filename for the cached image
             std::string ext;
@@ -537,22 +556,17 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
         }
       }
 
-      // Fallback to alt text if image processing fails
-      if (!alt.empty()) {
-        alt = "[Image: " + alt + "]";
+      // Fallback to alt text or placeholder if image processing fails
+      {
+        std::string placeholder = alt.empty() ? "[Image]" : "[Image: " + alt + "]";
         self->startNewTextBlock(centeredBlockStyle);
         self->italicUntilDepth = std::min(self->italicUntilDepth, self->depth);
         self->depth += 1;
-        self->characterData(userData, alt.c_str(), alt.length());
+        self->characterData(userData, placeholder.c_str(), placeholder.length());
         // Skip any child content (skip until parent as we pre-advanced depth above)
         self->skipUntilDepth = self->depth - 1;
         return;
       }
-
-      // No alt text, skip
-      self->skipUntilDepth = self->depth;
-      self->depth += 1;
-      return;
     }
   }
 

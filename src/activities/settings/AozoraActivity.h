@@ -99,7 +99,6 @@ class AozoraActivity : public Activity {
 
   // AUTHOR_ACTION state
   int actionMenuIndex_ = 0;
-  State actionReturnState_ = AUTHOR_LIST;
 
   static constexpr const char* API_BASE = "https://aozora-epub-api.vercel.app";
 

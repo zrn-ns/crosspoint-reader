@@ -618,7 +618,6 @@ void AozoraActivity::loop() {
         const auto& author = authors_[selectedIndex_];
         selectedAuthorId_ = author.id;
         snprintf(selectedAuthorName_, sizeof(selectedAuthorName_), "%s", author.name);
-        actionReturnState_ = AUTHOR_LIST;
         {
           RenderLock lock(*this);
           pushState(AUTHOR_ACTION);
@@ -780,7 +779,6 @@ void AozoraActivity::loop() {
         const auto& fav = favEntries[selectedIndex_];
         selectedAuthorId_ = fav.authorId;
         snprintf(selectedAuthorName_, sizeof(selectedAuthorName_), "%s", fav.name);
-        actionReturnState_ = FAVORITE_AUTHORS;
         {
           RenderLock lock(*this);
           pushState(AUTHOR_ACTION);

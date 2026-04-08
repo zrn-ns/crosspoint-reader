@@ -255,6 +255,11 @@ static void resetSpiPins() {
 void setup() {
   t1 = millis();
 
+  // タイムゾーン設定（JST = UTC+9）。ディープスリープ後のリブートでも
+  // localtime_r()が日本時間を返すようにするため、起動直後に設定する。
+  setenv("TZ", "JST-9", 1);
+  tzset();
+
   resetSpiPins();
   HalSystem::begin();
   gpio.begin();

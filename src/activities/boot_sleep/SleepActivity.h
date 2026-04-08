@@ -15,4 +15,10 @@ class SleepActivity final : public Activity {
   void renderCoverSleepScreen() const;
   void renderBitmapSleepScreen(const Bitmap& bitmap) const;
   void renderBlankSleepScreen() const;
+  void renderCalendarOverlay() const;
+  void drawCalendarIfPending() const;
+  static bool isTimeValid();
+
+  // カレンダーをBW描画パスに挿入するためのフラグ
+  mutable bool calendarPending = false;
 };

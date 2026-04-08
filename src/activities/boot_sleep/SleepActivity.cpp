@@ -8,6 +8,8 @@
 #include <Txt.h>
 #include <Xtc.h>
 
+#include <ctime>
+
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "components/UITheme.h"
@@ -24,6 +26,9 @@ void SleepActivity::onEnter() {
   const bool wasDarkMode = renderer.isDarkMode();
   renderer.setDarkMode(false);
 
+  // カレンダーをBW描画パスに挿入するためのフラグ設定
+  calendarPending = SETTINGS.sleepCalendar && isTimeValid();
+
   switch (SETTINGS.sleepScreen) {
     case (CrossPointSettings::SLEEP_SCREEN_MODE::BLANK):
       renderBlankSleepScreen();
@@ -38,6 +43,13 @@ void SleepActivity::onEnter() {
     default:
       renderDefaultSleepScreen();
       break;
+  }
+
+  // ビットマップパスで消費されなかった場合（BLANK/DARK/LIGHT）はここで描画
+  if (calendarPending) {
+    calendarPending = false;
+    renderCalendarOverlay();
+    renderer.displayBuffer(HalDisplay::HALF_REFRESH);
   }
 
   renderer.setDarkMode(wasDarkMode);
@@ -201,9 +213,12 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
     renderer.invertScreen();
   }
 
+  // カレンダーをBWパスに挿入（displayBuffer前）
+  drawCalendarIfPending();
+
   renderer.displayBuffer(HalDisplay::HALF_REFRESH);
 
-  if (hasGreyscale) {
+  if (hasGreyscale && !SETTINGS.sleepCalendar) {
     bitmap.rewindToData();
     renderer.clearScreen(0x00);
     renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
@@ -305,4 +320,145 @@ void SleepActivity::renderCoverSleepScreen() const {
 void SleepActivity::renderBlankSleepScreen() const {
   renderer.clearScreen();
   renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+}
+
+void SleepActivity::drawCalendarIfPending() const {
+  if (!calendarPending) return;
+  calendarPending = false;
+  renderCalendarOverlay();
+}
+
+bool SleepActivity::isTimeValid() {
+  // 2024-01-01 00:00:00 UTC = 1704067200
+  // NTP未同期の場合、time()はエポック付近（1970年）を返す
+  return time(nullptr) >= 1704067200;
+}
+
+void SleepActivity::renderCalendarOverlay() const {
+  // 現在時刻を取得
+  const time_t now = time(nullptr);
+  struct tm timeInfo;
+  localtime_r(&now, &timeInfo);
+
+  const int year = timeInfo.tm_year + 1900;
+  const int month = timeInfo.tm_mon + 1;
+  const int today = timeInfo.tm_mday;
+
+  // 今月の日数を計算（翌月0日 = 今月末日）
+  struct tm endOfMonth = {};
+  endOfMonth.tm_year = timeInfo.tm_year;
+  endOfMonth.tm_mon = timeInfo.tm_mon + 1;
+  endOfMonth.tm_mday = 0;
+  mktime(&endOfMonth);
+  const int daysInMonth = endOfMonth.tm_mday;
+
+  // 今月1日の曜日（0=日曜）
+  struct tm firstDay = {};
+  firstDay.tm_year = timeInfo.tm_year;
+  firstDay.tm_mon = timeInfo.tm_mon;
+  firstDay.tm_mday = 1;
+  mktime(&firstDay);
+  const int startDow = firstDay.tm_wday;
+
+  // レイアウト定数（フォント: UI_12 / UI_10）
+  static constexpr int COL_WIDTH = 58;
+  static constexpr int ROW_HEIGHT = 50;
+  static constexpr int HEADER_HEIGHT = 54;
+  static constexpr int DOW_HEIGHT = 34;
+  static constexpr int PADDING_X = 18;
+  static constexpr int PADDING_TOP = 22;
+  static constexpr int PADDING_BOTTOM = 28;
+  static constexpr int GRID_WIDTH = COL_WIDTH * 7;  // 406px
+
+  // 今日マーカー: 角丸四角形
+  static constexpr int TODAY_MARK_W = 40;
+  static constexpr int TODAY_MARK_H = 36;
+  static constexpr int TODAY_MARK_RADIUS = 8;
+
+  // 行数を計算
+  const int totalCells = startDow + daysInMonth;
+  const int numRows = (totalCells + 6) / 7;
+
+  const int calendarHeight = PADDING_TOP + HEADER_HEIGHT + DOW_HEIGHT + ROW_HEIGHT * numRows + PADDING_BOTTOM;
+  const int calendarWidth = GRID_WIDTH + PADDING_X * 2;
+
+  const int screenWidth = renderer.getScreenWidth();
+  const int screenHeight = renderer.getScreenHeight();
+
+  // X位置: 画面中央
+  const int calX = (screenWidth - calendarWidth) / 2;
+
+  // Y位置: 設定に応じて上部/中央/下部
+  int calY;
+  int viewTop, viewRight, viewBottom, viewLeft;
+  renderer.getOrientedViewableTRBL(&viewTop, &viewRight, &viewBottom, &viewLeft);
+
+  switch (SETTINGS.sleepCalendarPosition) {
+    case CrossPointSettings::CALENDAR_POS_TOP:
+      calY = viewTop + 20;
+      break;
+    case CrossPointSettings::CALENDAR_POS_BOTTOM:
+      calY = screenHeight - viewBottom - calendarHeight - 20;
+      break;
+    case CrossPointSettings::CALENDAR_POS_CENTER:
+    default:
+      calY = (screenHeight - calendarHeight) / 2;
+      break;
+  }
+
+  // 白背景角丸矩形を描画
+  static constexpr int BG_CORNER_RADIUS = 16;
+  renderer.fillRoundedRect(calX, calY, calendarWidth, calendarHeight, BG_CORNER_RADIUS, Color::White);
+
+  // 年月ヘッダー: 月数字のみ中央配置
+  char monthBuf[4];
+  snprintf(monthBuf, sizeof(monthBuf), "%d", month);
+
+  const int headerY = calY + PADDING_TOP - 20;
+  renderer.drawCenteredText(NOTOSANS_18_FONT_ID, headerY, monthBuf, true, EpdFontFamily::REGULAR);
+
+  // 曜日ヘッダー（UI_10, Bold）
+  static constexpr StrId dowIds[] = {StrId::STR_SUN, StrId::STR_MON, StrId::STR_TUE, StrId::STR_WED,
+                                     StrId::STR_THU, StrId::STR_FRI, StrId::STR_SAT};
+  const int dowY = headerY + HEADER_HEIGHT;
+  const int gridLeft = calX + PADDING_X;
+
+  for (int col = 0; col < 7; col++) {
+    const char* dowStr = I18N.get(dowIds[col]);
+    const int textW = renderer.getTextWidth(UI_10_FONT_ID, dowStr, EpdFontFamily::BOLD);
+    const int cellCenterX = gridLeft + col * COL_WIDTH + (COL_WIDTH - textW) / 2;
+    renderer.drawText(UI_10_FONT_ID, cellCenterX, dowY, dowStr, true, EpdFontFamily::BOLD);
+  }
+
+  // 日付グリッド（UI_12）
+  const int gridStartY = dowY + DOW_HEIGHT;
+  const int lineH = renderer.getLineHeight(UI_12_FONT_ID);
+
+  for (int day = 1; day <= daysInMonth; day++) {
+    const int cellIndex = startDow + day - 1;
+    const int row = cellIndex / 7;
+    const int col = cellIndex % 7;
+    const bool isSunday = (col == 0);
+    const bool isToday = (day == today);
+
+    char dayBuf[4];
+    snprintf(dayBuf, sizeof(dayBuf), "%d", day);
+
+    const auto style = (isSunday || isToday) ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR;
+    const int textW = renderer.getTextWidth(UI_12_FONT_ID, dayBuf, style);
+    const int cellCenterX = gridLeft + col * COL_WIDTH + COL_WIDTH / 2;
+    const int cellCenterY = gridStartY + row * ROW_HEIGHT + ROW_HEIGHT / 2;
+    // drawTextのY座標はグリフ上端。lineHeightで垂直中央揃え。
+    const int textX = cellCenterX - textW / 2;
+    const int textY = cellCenterY - lineH / 2;
+
+    if (isToday) {
+      // 薄グレー角丸四角（テキストと同じ中心基準）+ 黒文字
+      renderer.fillRoundedRect(cellCenterX - TODAY_MARK_W / 2, textY - (TODAY_MARK_H - lineH) / 2 + 2, TODAY_MARK_W,
+                               TODAY_MARK_H, TODAY_MARK_RADIUS, Color::LightGray);
+      renderer.drawText(UI_12_FONT_ID, textX, textY, dayBuf, true, style);
+    } else {
+      renderer.drawText(UI_12_FONT_ID, textX, textY, dayBuf, true, style);
+    }
+  }
 }

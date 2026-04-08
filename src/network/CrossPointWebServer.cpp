@@ -1161,17 +1161,8 @@ void CrossPointWebServer::handleDelete() const {
     bool success = false;
     FsFile f = Storage.open(itemPath.c_str());
     if (f && f.isDirectory()) {
-      // For folders, ensure empty before removing
-      FsFile entry = f.openNextFile();
-      if (entry) {
-        entry.close();
-        f.close();
-        failedItems += itemPath + " (folder not empty); ";
-        allSuccess = false;
-        continue;
-      }
       f.close();
-      success = Storage.rmdir(itemPath.c_str());
+      success = Storage.removeDir(itemPath.c_str());
     } else {
       // It's a file (or couldn't open as dir) — remove file
       if (f) f.close();

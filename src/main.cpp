@@ -26,6 +26,9 @@
 #include "SdCardFontSystem.h"
 #include "activities/Activity.h"
 #include "activities/ActivityManager.h"
+#ifdef GRAYSCALE_TEST_MODE
+#include "activities/util/GrayscaleTestActivity.h"
+#endif
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/ButtonNavigator.h"
@@ -330,6 +333,12 @@ void setup() {
   LOG_DBG("MAIN", "Starting CrossPoint version " CROSSPOINT_VERSION);
 
   setupDisplayAndFonts();
+
+#ifdef GRAYSCALE_TEST_MODE
+  activityManager.replaceActivity(
+      std::make_unique<GrayscaleTestActivity>(renderer, mappedInputManager));
+  return;
+#endif
 
   activityManager.goToBoot();
 

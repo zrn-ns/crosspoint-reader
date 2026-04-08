@@ -58,13 +58,13 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          name: CrossPoint Reader ${{ github.ref_name }}
+          name: CrossPoint Reader JP ${{ github.ref_name }}
           files: |
             firmware.bin
             bootloader.bin
             partitions.bin
           body: |
-            ## CrossPoint Reader ${{ github.ref_name }}
+            ## CrossPoint Reader JP ${{ github.ref_name }}
 
             ### 📦 ファームウェア
 

@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "AozoraIndexManager.h"
+#include "FavoriteAuthorsManager.h"
 #include "activities/Activity.h"
 #include "util/ButtonNavigator.h"
 
@@ -32,6 +33,8 @@ class AozoraActivity : public Activity {
     WORK_DETAIL,
     DOWNLOADING,
     DOWNLOADED_LIST,
+    FAVORITE_AUTHORS,
+    AUTHOR_ACTION,
     LOADING,
     ERROR,
   };
@@ -92,6 +95,11 @@ class AozoraActivity : public Activity {
 
   // Download index manager
   AozoraIndexManager indexManager_;
+  FavoriteAuthorsManager favoritesManager_;
+
+  // AUTHOR_ACTION state
+  int actionMenuIndex_ = 0;
+  State actionReturnState_ = AUTHOR_LIST;
 
   static constexpr const char* API_BASE = "https://aozora-epub-api.vercel.app";
 

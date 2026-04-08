@@ -33,6 +33,12 @@ class CrossPointSettings {
     INVERTED_BLACK_AND_WHITE = 2,
     SLEEP_SCREEN_COVER_FILTER_COUNT
   };
+  enum SLEEP_CALENDAR_POSITION {
+    CALENDAR_POS_TOP = 0,
+    CALENDAR_POS_CENTER = 1,
+    CALENDAR_POS_BOTTOM = 2,
+    SLEEP_CALENDAR_POSITION_COUNT
+  };
 
   // Status bar enum - legacy
   enum STATUS_BAR_MODE {
@@ -162,6 +168,9 @@ class CrossPointSettings {
   uint8_t sleepScreenCoverMode = FIT;
   // Sleep screen cover filter
   uint8_t sleepScreenCoverFilter = NO_FILTER;
+  // Sleep calendar overlay
+  uint8_t sleepCalendar = 0;  // 0=OFF, 1=ON
+  uint8_t sleepCalendarPosition = CALENDAR_POS_CENTER;
   // Status bar settings (statusBar retained for migration only)
   uint8_t statusBar = FULL;
   uint8_t statusBarChapterPageCount = 0;

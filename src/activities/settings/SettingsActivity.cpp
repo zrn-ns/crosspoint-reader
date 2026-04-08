@@ -206,6 +206,10 @@ void SettingsActivity::toggleCurrentSetting() {
       renderer.setInvertImagesInDarkMode(SETTINGS.invertImages);
     }
   } else if (setting.type == SettingType::ENUM && setting.valuePtr != nullptr) {
+    // Calendar Position: skip when calendar is disabled
+    if (setting.nameId == StrId::STR_SLEEP_CALENDAR_POSITION && SETTINGS.sleepCalendar == 0) {
+      return;
+    }
     // Font Size: skip when external font is selected (fixed bitmap size)
     if (setting.nameId == StrId::STR_FONT_SIZE && FontMgr.getSelectedIndex() >= 0) {
       return;

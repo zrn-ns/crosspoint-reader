@@ -7,7 +7,11 @@
 #include <I18n.h>
 #include <Utf8.h>
 
+#include <Logging.h>
+#include <esp_task_wdt.h>
+
 #include <algorithm>
+#include <cstring>
 
 #include "../util/ConfirmationActivity.h"
 #include "CrossPointSettings.h"
@@ -17,6 +21,80 @@
 
 namespace {
 constexpr unsigned long GO_HOME_MS = 1000;
+
+// 指定ディレクトリ以下の空ディレクトリを再帰的に削除する。
+// リーフ（末端）から順に削除するため、ネストした空ディレクトリも連鎖的に削除される。
+// 戻り値: 引数のディレクトリ自身が空になり削除された場合 true
+bool removeEmptyDirsRecursive(const std::string& dirPath) {
+  auto dir = Storage.open(dirPath.c_str());
+  if (!dir || !dir.isDirectory()) {
+    if (dir) dir.close();
+    return false;
+  }
+
+  char name[256];
+  bool hasEntries = false;
+
+  // まずサブディレクトリを再帰処理
+  dir.rewindDirectory();
+  for (auto entry = dir.openNextFile(); entry; entry = dir.openNextFile()) {
+    entry.getName(name, sizeof(name));
+    if (entry.isDirectory()) {
+      entry.close();
+      std::string subPath = dirPath + "/" + name;
+      // サブディレクトリを再帰処理。削除されなかったらエントリが残っている
+      if (!removeEmptyDirsRecursive(subPath)) {
+        hasEntries = true;
+      }
+    } else {
+      // ファイルが存在する → 空ではない
+      entry.close();
+      hasEntries = true;
+    }
+    yield();
+    esp_task_wdt_reset();
+  }
+  dir.close();
+
+  if (!hasEntries) {
+    if (Storage.rmdir(dirPath.c_str())) {
+      LOG_DBG("CLN", "Removed empty directory: %s", dirPath.c_str());
+      return true;
+    }
+  }
+  return false;
+}
+
+// SDカードルート直下のユーザーディレクトリから空ディレクトリを削除する
+void cleanupEmptyDirectories() {
+  auto root = Storage.open("/");
+  if (!root || !root.isDirectory()) {
+    if (root) root.close();
+    return;
+  }
+
+  char name[256];
+  // ディレクトリ名を先に収集（イテレーション中の削除を避ける）
+  std::vector<std::string> dirs;
+  for (auto entry = root.openNextFile(); entry; entry = root.openNextFile()) {
+    if (entry.isDirectory()) {
+      entry.getName(name, sizeof(name));
+      // 保護対象を除外: ドットで始まるディレクトリ、システムディレクトリ
+      if (name[0] != '.' && strcmp(name, "System Volume Information") != 0 && strcmp(name, "XTCache") != 0) {
+        dirs.emplace_back(std::string("/") + name);
+      }
+    }
+    entry.close();
+    yield();
+    esp_task_wdt_reset();
+  }
+  root.close();
+
+  for (const auto& dirPath : dirs) {
+    removeEmptyDirsRecursive(dirPath);
+  }
+}
+
 }  // namespace
 
 void sortFileList(std::vector<std::string>& strs) {
@@ -111,6 +189,11 @@ void FileBrowserActivity::loadFiles() {
 
 void FileBrowserActivity::onEnter() {
   Activity::onEnter();
+
+  // ルートディレクトリ表示時のみ、空ディレクトリを削除する
+  if (basepath == "/") {
+    cleanupEmptyDirectories();
+  }
 
   loadFiles();
   selectorIndex = 0;

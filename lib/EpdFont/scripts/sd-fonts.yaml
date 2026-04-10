@@ -219,6 +219,15 @@ families:
       regular: {url: "https://github.com/googlefonts/morisawa-biz-ud-gothic/raw/main/fonts/ttf/BIZUDGothic-Regular.ttf"}
       bold:    {url: "https://github.com/googlefonts/morisawa-biz-ud-gothic/raw/main/fonts/ttf/BIZUDGothic-Bold.ttf"}
 
+  - name: NotoSerifJp
+    description: "Serif Japanese (JIS X 0213)"
+    intervals: ascii,latin1,punctuation,cjk
+    codepoints_file: codepoints/japanese_jis0213.txt
+    sizes: [10, 12, 14, 16, 18]
+    styles:
+      regular: {url: "https://github.com/notofonts/noto-cjk/raw/main/Serif/Variable/OTF/Subset/NotoSerifJP-VF.otf", variable: {wght: 400}}
+      bold:    {url: "https://github.com/notofonts/noto-cjk/raw/main/Serif/Variable/OTF/Subset/NotoSerifJP-VF.otf", variable: {wght: 700}}
+
   # ── Additional scripts (no complex shaping needed) ─────────────────────
 
   - name: NotoSansArmenian

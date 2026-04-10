@@ -18,6 +18,8 @@
 #include <ctime>
 #include <sys/time.h>
 #include <esp_task_wdt.h>
+#include <esp_private/esp_clk.h>
+#include <soc/rtc.h>
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
@@ -35,6 +37,10 @@
 #include "fontIds.h"
 #include "util/ButtonNavigator.h"
 #include "util/ScreenshotUtil.h"
+
+// ディープスリープを跨いで保持されるRTCメモリ変数（スリープ時間の計算用）
+static RTC_DATA_ATTR uint64_t rtcTicksAtSleep = 0;
+static RTC_DATA_ATTR time_t unixTimeAtSleep = 0;
 
 MappedInputManager mappedInputManager(gpio);
 GfxRenderer renderer(display);
@@ -191,10 +197,13 @@ void waitForPowerRelease() {
 void enterDeepSleep() {
   HalPowerManager::Lock powerLock;  // Ensure we are at normal CPU frequency for sleep preparation
   APP_STATE.lastSleepFromReader = activityManager.isReaderActivity();
-  // NTP同期済みの時刻をファイルに保存（ディープスリープ復帰時の復元用）
+  // 時刻をファイル + RTCメモリに保存（ディープスリープ復帰時の復元用）
   const time_t now = time(nullptr);
   if (now >= 1704067200) {
     APP_STATE.lastKnownTime = static_cast<uint32_t>(now);
+    // RTCスローカウンタを記録（ディープスリープ中もカウント継続）
+    rtcTicksAtSleep = rtc_time_get();
+    unixTimeAtSleep = now;
   }
   APP_STATE.saveToFile();
 
@@ -356,16 +365,28 @@ void setup() {
 
   APP_STATE.loadFromFile();
 
-  // ディープスリープ復帰時: 保存済み時刻をシステムクロックに復元
+  // ディープスリープ復帰時: RTCスローカウンタでスリープ時間を計算し時刻を復元
   {
     const time_t bootTime = time(nullptr);
-    LOG_DBG("MAIN", "Boot time(): %ld, saved: %lu", (long)bootTime, (unsigned long)APP_STATE.lastKnownTime);
-    if (bootTime < 1704067200 && APP_STATE.lastKnownTime >= 1704067200) {
+    if (bootTime >= 1704067200) {
+      LOG_DBG("MAIN", "System time valid (%ld), no restore needed", (long)bootTime);
+    } else if (unixTimeAtSleep >= 1704067200 && rtcTicksAtSleep > 0) {
+      // RTCスローカウンタからスリープ経過時間を計算
+      const uint64_t rtcNow = rtc_time_get();
+      const uint64_t rtcElapsed = rtcNow - rtcTicksAtSleep;
+      const uint32_t rtcFreq = esp_clk_slowclk_cal_get();  // 周期（マイクロ秒 * 2^19）
+      // ticks → 秒: elapsed * period_us / (2^19 * 1e6)
+      const time_t elapsedSec = static_cast<time_t>((rtcElapsed * rtcFreq) >> 19) / 1000000;
+      const time_t restoredTime = unixTimeAtSleep + elapsedSec;
+      struct timeval tv = {.tv_sec = restoredTime, .tv_usec = 0};
+      settimeofday(&tv, nullptr);
+      LOG_DBG("MAIN", "Restored time: saved=%ld +%lds = %ld", (long)unixTimeAtSleep, (long)elapsedSec,
+              (long)restoredTime);
+    } else if (APP_STATE.lastKnownTime >= 1704067200) {
+      // RTCカウンタが利用できない場合はファイルからフォールバック（スリープ時間分ずれる）
       struct timeval tv = {.tv_sec = static_cast<time_t>(APP_STATE.lastKnownTime), .tv_usec = 0};
       settimeofday(&tv, nullptr);
-      LOG_DBG("MAIN", "Restored time from state");
-    } else if (bootTime >= 1704067200) {
-      LOG_DBG("MAIN", "RTC time valid, no restore needed");
+      LOG_DBG("MAIN", "Restored time from file (no RTC): %lu", (unsigned long)APP_STATE.lastKnownTime);
     }
   }
 

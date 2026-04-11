@@ -3,6 +3,9 @@
 #include <Epub.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
+#include <HalGPIO.h>
+#include <HalPowerManager.h>
+#include <HalRTC.h>
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Txt.h>
@@ -27,7 +30,8 @@ void SleepActivity::onEnter() {
   renderer.setDarkMode(false);
 
   // カレンダーをBW描画パスに挿入するためのフラグ設定
-  calendarPending = SETTINGS.sleepCalendar && isTimeValid();
+  // X4 では DS3231 がないため、電源断後に正確な日付を保持できない → カレンダー無効
+  calendarPending = SETTINGS.sleepCalendar && isTimeValid() && gpio.deviceIsX3();
 
   switch (SETTINGS.sleepScreen) {
     case (CrossPointSettings::SLEEP_SCREEN_MODE::BLANK):
@@ -45,15 +49,17 @@ void SleepActivity::onEnter() {
       break;
   }
 
-  // デバッグ: スリープ時の時刻を画面に表示（設定→本体→デバッグ表示で有効化）
+  // デバッグ: スリープ時の時刻とバッテリー情報を画面に表示（設定→本体→デバッグ表示で有効化）
+  // SRC= 1:DS3231, 3:ESP-IDF, 5:None
   if (SETTINGS.debugDisplay) {
+    extern uint8_t g_timeRestoreSource;
     const time_t now = time(nullptr);
     struct tm ti;
     localtime_r(&now, &ti);
-    char dbg[64];
-    snprintf(dbg, sizeof(dbg), "%d/%d/%d %d:%02d:%02d T:%ld", ti.tm_year + 1900, ti.tm_mon + 1, ti.tm_mday, ti.tm_hour,
-             ti.tm_min, ti.tm_sec, (long)now);
-    renderer.fillRect(5, 5, 380, 30, false);
+    char dbg[128];
+    snprintf(dbg, sizeof(dbg), "%d/%d/%d %d:%02d:%02d SRC:%d BAT:%d%%", ti.tm_year + 1900, ti.tm_mon + 1, ti.tm_mday,
+             ti.tm_hour, ti.tm_min, ti.tm_sec, g_timeRestoreSource, powerManager.getBatteryPercentage());
+    renderer.fillRect(5, 5, 600, 30, false);
     renderer.drawText(UI_10_FONT_ID, 10, 10, dbg, true);
     renderer.displayBuffer(HalDisplay::HALF_REFRESH);
   }

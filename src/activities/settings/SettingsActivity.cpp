@@ -16,6 +16,7 @@
 #include "FontSelectActivity.h"
 #include "FontSelectionActivity.h"
 #include "GenerateAllCacheActivity.h"
+#include "HalGPIO.h"
 #include "KOReaderSettingsActivity.h"
 #include "LanguageSelectActivity.h"
 #include "LineSpacingSelectionActivity.h"
@@ -39,6 +40,11 @@ void SettingsActivity::rebuildSettingsLists() {
 
   for (auto& setting : getSettingsList(&sdFontSystem.registry())) {
     if (setting.category == StrId::STR_NONE_OPT) continue;
+    // X4 ではカレンダー設定を非表示（DS3231 非搭載のため正確な日付を保持できない）
+    if (gpio.deviceIsX4() &&
+        (setting.nameId == StrId::STR_SLEEP_CALENDAR || setting.nameId == StrId::STR_SLEEP_CALENDAR_POSITION)) {
+      continue;
+    }
     if (setting.category == StrId::STR_CAT_DISPLAY) {
       displaySettings.push_back(setting);
     } else if (setting.category == StrId::STR_CAT_READER) {

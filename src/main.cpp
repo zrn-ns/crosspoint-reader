@@ -7,15 +7,15 @@
 #include <HalDisplay.h>
 #include <HalGPIO.h>
 #include <HalPowerManager.h>
+#include <HalRTC.h>
 #include <HalStorage.h>
 #include <HalSystem.h>
 #include <I18n.h>
 #include <Logging.h>
 #include <SPI.h>
 #include <builtinFonts/all.h>
-#include <esp_private/esp_clk.h>
+#include <Wire.h>
 #include <esp_task_wdt.h>
-#include <soc/rtc.h>
 #include <sys/time.h>
 
 #include <cstring>
@@ -38,9 +38,9 @@
 #include "util/ButtonNavigator.h"
 #include "util/ScreenshotUtil.h"
 
-// ディープスリープを跨いで保持されるRTCメモリ変数（スリープ時間の計算用）
-static RTC_DATA_ATTR uint64_t rtcTicksAtSleep = 0;
-static RTC_DATA_ATTR time_t unixTimeAtSleep = 0;
+// デバッグ: 起動時にどの時刻復元ブランチが使われたかを記録
+// 0=未設定, 1=DS3231, 3=ESP-IDF, 5=なし
+uint8_t g_timeRestoreSource = 0;
 
 MappedInputManager mappedInputManager(gpio);
 GfxRenderer renderer(display);
@@ -193,19 +193,46 @@ void waitForPowerRelease() {
   }
 }
 
+// デバッグ表示有効時、バッテリーログをSDカードに追記（/.crosspoint/power_log.txt）
+static void appendPowerLog(const char* event) {
+  if (!SETTINGS.debugDisplay) return;
+  const time_t now = time(nullptr);
+  struct tm ti;
+  localtime_r(&now, &ti);
+
+  // BQ27220から電圧(mV)と電流(mA)を読み取り（X3のみ）
+  uint16_t voltageMv = 0;
+  int16_t currentMa = 0;
+  if (gpio.deviceIsX3()) {
+    Wire.beginTransmission(0x55);
+    Wire.write(0x08);  // BQ27220_VOLT_REG
+    if (Wire.endTransmission(false) == 0 && Wire.requestFrom(static_cast<uint8_t>(0x55), static_cast<uint8_t>(2)) == 2) {
+      voltageMv = Wire.read() | (static_cast<uint16_t>(Wire.read()) << 8);
+    }
+    Wire.beginTransmission(0x55);
+    Wire.write(0x0C);  // BQ27220_CUR_REG
+    if (Wire.endTransmission(false) == 0 && Wire.requestFrom(static_cast<uint8_t>(0x55), static_cast<uint8_t>(2)) == 2) {
+      currentMa = static_cast<int16_t>(Wire.read() | (static_cast<uint16_t>(Wire.read()) << 8));
+    }
+  }
+
+  char line[128];
+  snprintf(line, sizeof(line), "%04d/%02d/%02d %02d:%02d:%02d %s %d%% %dmV %dmA\n", ti.tm_year + 1900, ti.tm_mon + 1,
+           ti.tm_mday, ti.tm_hour, ti.tm_min, ti.tm_sec, event, powerManager.getBatteryPercentage(), voltageMv,
+           currentMa);
+  auto file = Storage.open("/.crosspoint/power_log.txt", O_WRONLY | O_CREAT | O_APPEND);
+  if (file) {
+    file.write(line, strlen(line));
+    file.close();
+  }
+}
+
 // Enter deep sleep mode
 void enterDeepSleep() {
   HalPowerManager::Lock powerLock;  // Ensure we are at normal CPU frequency for sleep preparation
   APP_STATE.lastSleepFromReader = activityManager.isReaderActivity();
-  // 時刻をファイル + RTCメモリに保存（ディープスリープ復帰時の復元用）
-  const time_t now = time(nullptr);
-  if (now >= 1704067200) {
-    APP_STATE.lastKnownTime = static_cast<uint32_t>(now);
-    // RTCスローカウンタを記録（ディープスリープ中もカウント継続）
-    rtcTicksAtSleep = rtc_time_get();
-    unixTimeAtSleep = now;
-  }
   APP_STATE.saveToFile();
+  appendPowerLog("SLEEP");
 
   activityManager.goToSleep();
 
@@ -280,6 +307,7 @@ void setup() {
   HalSystem::begin();
   gpio.begin();
   powerManager.begin();
+  halRTC.begin();
 
 #ifdef ENABLE_SERIAL_LOG
   if (gpio.isUsbConnected()) {
@@ -364,30 +392,39 @@ void setup() {
 
   APP_STATE.loadFromFile();
 
-  // ディープスリープ復帰時: RTCスローカウンタでスリープ時間を計算し時刻を復元
+  // 時刻復元の優先順位:
+  // 1. DS3231 外部RTC（X3のみ、USB給電中は動作するがバッテリースリープでは電源断）
+  // 2. ESP-IDF内部復元（CONFIG_NEWLIB_TIME_SYSCALL_USE_RTC_HRT、USB給電時のみ有効）
+  // 時刻が不明な場合はエポック付近のまま残し、isTimeValid()がfalseを返すようにする。
   {
     const time_t bootTime = time(nullptr);
-    if (bootTime >= 1704067200) {
-      LOG_DBG("MAIN", "System time valid (%ld), no restore needed", (long)bootTime);
-    } else if (unixTimeAtSleep >= 1704067200 && rtcTicksAtSleep > 0) {
-      // RTCスローカウンタからスリープ経過時間を計算
-      const uint64_t rtcNow = rtc_time_get();
-      const uint64_t rtcElapsed = rtcNow - rtcTicksAtSleep;
-      const uint32_t rtcFreq = esp_clk_slowclk_cal_get();  // 周期（マイクロ秒 * 2^19）
-      // ticks → 秒: elapsed * period_us / (2^19 * 1e6)
-      const time_t elapsedSec = static_cast<time_t>((rtcElapsed * rtcFreq) >> 19) / 1000000;
-      const time_t restoredTime = unixTimeAtSleep + elapsedSec;
-      struct timeval tv = {.tv_sec = restoredTime, .tv_usec = 0};
-      settimeofday(&tv, nullptr);
-      LOG_DBG("MAIN", "Restored time: saved=%ld +%lds = %ld", (long)unixTimeAtSleep, (long)elapsedSec,
-              (long)restoredTime);
-    } else if (APP_STATE.lastKnownTime >= 1704067200) {
-      // RTCカウンタが利用できない場合はファイルからフォールバック（スリープ時間分ずれる）
-      struct timeval tv = {.tv_sec = static_cast<time_t>(APP_STATE.lastKnownTime), .tv_usec = 0};
-      settimeofday(&tv, nullptr);
-      LOG_DBG("MAIN", "Restored time from file (no RTC): %lu", (unsigned long)APP_STATE.lastKnownTime);
+    struct tm rtcTm;
+    if (halRTC.readTime(rtcTm)) {
+      // DS3231 から UTC 時刻を復元
+      // timegm() が利用できないため、TZを一時的にUTCに変更してmktime()を使用
+      setenv("TZ", "UTC0", 1);
+      tzset();
+      const time_t rtcTime = mktime(&rtcTm);
+      setenv("TZ", "JST-9", 1);
+      tzset();
+      if (rtcTime >= 1704067200) {
+        struct timeval tv = {.tv_sec = rtcTime, .tv_usec = 0};
+        settimeofday(&tv, nullptr);
+        g_timeRestoreSource = 1;
+        LOG_DBG("MAIN", "Restored time from DS3231: %ld (boot=%ld)", (long)rtcTime, (long)bootTime);
+      } else {
+        LOG_DBG("MAIN", "DS3231 time too old: %ld", (long)rtcTime);
+      }
+    } else if (bootTime >= 1704067200) {
+      g_timeRestoreSource = 3;
+      LOG_DBG("MAIN", "Using ESP-IDF restored time: %ld", (long)bootTime);
+    } else {
+      g_timeRestoreSource = 5;
+      LOG_DBG("MAIN", "No valid time source available");
     }
   }
+
+  appendPowerLog("WAKE ");
 
   RECENT_BOOKS.loadFromFile();
 

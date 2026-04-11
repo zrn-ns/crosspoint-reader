@@ -1,6 +1,7 @@
 #include "WifiSelectionActivity.h"
 
 #include <GfxRenderer.h>
+#include <HalRTC.h>
 #include <I18n.h>
 #include <Logging.h>
 #include <WiFi.h>
@@ -258,6 +259,13 @@ void WifiSelectionActivity::checkConnectionStatus() {
     }
     if (sntp_get_sync_status() == SNTP_SYNC_STATUS_COMPLETED) {
       LOG_DBG("WIFI", "NTP time synced (JST)");
+      // DS3231 に UTC 時刻を書き込み
+      if (halRTC.isAvailable()) {
+        const time_t now = time(nullptr);
+        struct tm utc;
+        gmtime_r(&now, &utc);
+        halRTC.writeTime(utc);
+      }
     } else {
       LOG_DBG("WIFI", "NTP sync timeout");
     }

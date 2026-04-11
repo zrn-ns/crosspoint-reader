@@ -1,6 +1,7 @@
 #include "KOReaderSyncActivity.h"
 
 #include <GfxRenderer.h>
+#include <HalRTC.h>
 #include <I18n.h>
 #include <Logging.h>
 #include <WiFi.h>
@@ -35,6 +36,13 @@ void syncTimeWithNTP() {
 
   if (retry < maxRetries) {
     LOG_DBG("KOSync", "NTP time synced");
+    // DS3231 に UTC 時刻を書き込み
+    if (halRTC.isAvailable()) {
+      const time_t now = time(nullptr);
+      struct tm utc;
+      gmtime_r(&now, &utc);
+      halRTC.writeTime(utc);
+    }
   } else {
     LOG_DBG("KOSync", "NTP sync timeout, using fallback");
   }

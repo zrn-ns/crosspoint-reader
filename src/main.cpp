@@ -220,9 +220,9 @@ static void appendPowerLog(const char* event) {
   }
 
   char line[128];
-  snprintf(line, sizeof(line), "%04d/%02d/%02d %02d:%02d:%02d %s %d%% %dmV %dmA\n", ti.tm_year + 1900, ti.tm_mon + 1,
-           ti.tm_mday, ti.tm_hour, ti.tm_min, ti.tm_sec, event, powerManager.getBatteryPercentage(), voltageMv,
-           currentMa);
+  snprintf(line, sizeof(line), "%04d/%02d/%02d %02d:%02d:%02d %s %d%% %dmV %dmA RTC:%s\n", ti.tm_year + 1900,
+           ti.tm_mon + 1, ti.tm_mday, ti.tm_hour, ti.tm_min, ti.tm_sec, event, powerManager.getBatteryPercentage(),
+           voltageMv, currentMa, SETTINGS.rtcEnabled ? "ON" : "OFF");
   auto file = Storage.open("/.crosspoint/power_log.txt", O_WRONLY | O_CREAT | O_APPEND);
   if (file) {
     file.write(line, strlen(line));

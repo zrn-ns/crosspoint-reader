@@ -29,22 +29,19 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 
-const StrId SettingsActivity::categoryNames[categoryCount] = {StrId::STR_CAT_DISPLAY, StrId::STR_CAT_READER,
-                                                              StrId::STR_CAT_CONTROLS, StrId::STR_CAT_SYSTEM};
+const StrId SettingsActivity::categoryNames[MAX_CATEGORIES] = {StrId::STR_CAT_DISPLAY, StrId::STR_CAT_READER,
+                                                               StrId::STR_CAT_CONTROLS, StrId::STR_CAT_SYSTEM,
+                                                               StrId::STR_CAT_RTC};
 
 void SettingsActivity::rebuildSettingsLists() {
   displaySettings.clear();
   readerSettings.clear();
   controlsSettings.clear();
   systemSettings.clear();
+  rtcSettings.clear();
 
   for (auto& setting : getSettingsList(&sdFontSystem.registry())) {
     if (setting.category == StrId::STR_NONE_OPT) continue;
-    // X4 ではカレンダー設定を非表示（DS3231 非搭載のため正確な日付を保持できない）
-    if (gpio.deviceIsX4() &&
-        (setting.nameId == StrId::STR_SLEEP_CALENDAR || setting.nameId == StrId::STR_SLEEP_CALENDAR_POSITION)) {
-      continue;
-    }
     if (setting.category == StrId::STR_CAT_DISPLAY) {
       displaySettings.push_back(setting);
     } else if (setting.category == StrId::STR_CAT_READER) {
@@ -53,6 +50,12 @@ void SettingsActivity::rebuildSettingsLists() {
       controlsSettings.push_back(setting);
     } else if (setting.category == StrId::STR_CAT_SYSTEM) {
       systemSettings.push_back(setting);
+    } else if (setting.category == StrId::STR_CAT_RTC) {
+      // RTC無効時はマスタートグルのみ表示（カレンダーサブ設定を隠す）
+      if (!SETTINGS.rtcEnabled && setting.nameId != StrId::STR_RTC_ENABLED) {
+        continue;
+      }
+      rtcSettings.push_back(setting);
     }
   }
 
@@ -90,6 +93,11 @@ void SettingsActivity::rebuildSettingsLists() {
       currentSettings = &controlsSettings;
       break;
     case 3:
+      currentSettings = &systemSettings;
+      break;
+    case 4:
+      currentSettings = &rtcSettings;
+      break;
     default:
       currentSettings = &systemSettings;
       break;
@@ -99,6 +107,9 @@ void SettingsActivity::rebuildSettingsLists() {
 
 void SettingsActivity::onEnter() {
   Activity::onEnter();
+
+  // X4 にはDS3231がないためRTCタブを非表示
+  categoryCount = gpio.deviceIsX4() ? 4 : MAX_CATEGORIES;
 
   // Initialize selection based on caller hint.
   if (initialCategoryIndex < 0 || initialCategoryIndex >= categoryCount) {
@@ -207,6 +218,9 @@ void SettingsActivity::loop() {
       case 3:
         currentSettings = &systemSettings;
         break;
+      case 4:
+        currentSettings = &rtcSettings;
+        break;
     }
     settingsCount = static_cast<int>(currentSettings->size());
   }
@@ -227,6 +241,14 @@ void SettingsActivity::toggleCurrentSetting() {
     // Apply invert images change immediately
     if (setting.nameId == StrId::STR_INVERT_IMAGES) {
       renderer.setInvertImagesInDarkMode(SETTINGS.invertImages);
+    }
+    // RTCマスタートグル変更時はサブ設定の表示/非表示を更新
+    if (setting.nameId == StrId::STR_RTC_ENABLED) {
+      rebuildSettingsLists();
+      // 選択位置をクランプ（サブ設定が消えた場合に備える）
+      if (selectedSettingIndex > settingsCount) {
+        selectedSettingIndex = settingsCount;
+      }
     }
   } else if (setting.type == SettingType::ENUM && setting.valuePtr != nullptr) {
     // Calendar Position: skip when calendar is disabled

@@ -158,6 +158,7 @@ class SettingsActivity final : public Activity {
   std::vector<SettingInfo> readerSettings;
   std::vector<SettingInfo> controlsSettings;
   std::vector<SettingInfo> systemSettings;
+  std::vector<SettingInfo> rtcSettings;
   const std::vector<SettingInfo>* currentSettings = nullptr;
 
   const std::function<void()> onGoHome;
@@ -165,8 +166,9 @@ class SettingsActivity final : public Activity {
   int initialSettingIndex = 0;
   bool skipNextButtonCheck = false;
 
-  static constexpr int categoryCount = 4;
-  static const StrId categoryNames[categoryCount];
+  static constexpr int MAX_CATEGORIES = 5;
+  static const StrId categoryNames[MAX_CATEGORIES];
+  int categoryCount = MAX_CATEGORIES;
 
   void enterCategory(int categoryIndex);
   void toggleCurrentSetting();

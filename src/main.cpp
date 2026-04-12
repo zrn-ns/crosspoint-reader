@@ -183,7 +183,7 @@ void verifyPowerButtonDuration() {
   if (abort) {
     // Button released too early. Returning to sleep.
     // IMPORTANT: Re-arm the wakeup trigger before sleeping again
-    powerManager.startDeepSleep(gpio);
+    powerManager.startDeepSleep(gpio, gpio.deviceIsX4() || !SETTINGS.rtcEnabled);
   }
 }
 void waitForPowerRelease() {
@@ -242,7 +242,9 @@ void enterDeepSleep() {
   display.deepSleep();
   LOG_DBG("MAIN", "Entering deep sleep");
 
-  powerManager.startDeepSleep(gpio);
+  // X4: 常に完全電源断。X3: RTC無効なら完全電源断、RTC有効ならディープスリープ（DS3231時刻保持）
+  const bool fullPowerOff = gpio.deviceIsX4() || !SETTINGS.rtcEnabled;
+  powerManager.startDeepSleep(gpio, fullPowerOff);
 }
 
 void ensureSdFontLoaded(bool isVertical) { sdFontSystem.ensureLoaded(renderer, isVertical); }
@@ -376,7 +378,7 @@ void setup() {
     case HalGPIO::WakeupReason::AfterUSBPower:
       // If USB power caused a cold boot, go back to sleep
       LOG_DBG("MAIN", "Wakeup reason: After USB Power");
-      powerManager.startDeepSleep(gpio);
+      powerManager.startDeepSleep(gpio, gpio.deviceIsX4() || !SETTINGS.rtcEnabled);
       break;
     case HalGPIO::WakeupReason::AfterFlash:
       // After flashing, just proceed to boot

@@ -117,7 +117,7 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
     words.reserve(800);
     wordStyles.reserve(800);
     wordContinues.reserve(800);
-    rubyTexts.reserve(800);
+    // rubyTexts は遅延初期化（setRubyForWordAt時にのみ割り当て）— RAM節約
   }
 
   words.push_back(std::move(word));
@@ -127,7 +127,6 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
   }
   wordStyles.push_back(combinedStyle);
   wordContinues.push_back(attachToPrevious);
-  rubyTexts.push_back("");
 }
 
 void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
@@ -141,9 +140,12 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
 }
 
 void ParsedText::setRubyForWordAt(size_t index, const std::string& ruby) {
-  if (index < rubyTexts.size()) {
-    rubyTexts[index] = ruby;
+  if (index >= words.size()) return;
+  // 遅延初期化: ルビが初めて設定された時にベクタを拡張
+  if (rubyTexts.size() <= index) {
+    rubyTexts.resize(words.size());
   }
+  rubyTexts[index] = ruby;
 }
 
 // Consumes data to minimize memory usage

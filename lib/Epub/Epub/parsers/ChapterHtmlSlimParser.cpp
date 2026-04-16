@@ -1313,16 +1313,12 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
 
 void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
   const int effectiveFontId = (line->getBlockStyle().fontId != 0) ? line->getBlockStyle().fontId : fontId;
-  const int baseLineHeight = renderer.getLineHeight(effectiveFontId) * lineCompression;
-  const int rubyExtra = (line->hasRuby() && TextBlock::rubyFontId != 0)
-                            ? (renderer.getLineHeight(TextBlock::rubyFontId) + 2)
-                            : 0;
-  const int lineHeight = baseLineHeight + rubyExtra;
+  const int lineHeight = renderer.getLineHeight(effectiveFontId) * lineCompression;
 
   if (verticalMode) {
     // Vertical mode: columns placed right-to-left
-    const int columnWidth = baseLineHeight + rubyExtra;
-    const int columnSpacing = baseLineHeight / 4;
+    const int columnWidth = lineHeight;
+    const int columnSpacing = columnWidth / 4;
 
     if (!currentPage) {
       currentPage.reset(new Page());

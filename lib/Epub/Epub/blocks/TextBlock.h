@@ -41,6 +41,7 @@ class TextBlock final : public Block {
   bool getIsVertical() const { return isVertical; }
   bool hasRuby() const;
   const std::vector<std::string>& getRubyTexts() const { return rubyTexts; }
+  static int rubyFontId;  // アプリ層から設定されるルビフォントID（0=ルビ描画しない）
   bool isEmpty() override { return words.empty(); }
   size_t wordCount() const { return words.size(); }
   // given a renderer works out where to break the words into lines

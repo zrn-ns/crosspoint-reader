@@ -10,6 +10,7 @@
 
 #include "../../Epub.h"
 #include "../Page.h"
+#include "../blocks/TextBlock.h"
 #include "../blocks/TableRowBlock.h"
 #include "../converters/ImageDecoderFactory.h"
 #include "../converters/ImageToFramebufferDecoder.h"
@@ -1312,12 +1313,16 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
 
 void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
   const int effectiveFontId = (line->getBlockStyle().fontId != 0) ? line->getBlockStyle().fontId : fontId;
-  const int lineHeight = renderer.getLineHeight(effectiveFontId) * lineCompression;
+  const int baseLineHeight = renderer.getLineHeight(effectiveFontId) * lineCompression;
+  const int rubyExtra = (line->hasRuby() && TextBlock::rubyFontId != 0)
+                            ? (renderer.getLineHeight(TextBlock::rubyFontId) + 2)
+                            : 0;
+  const int lineHeight = baseLineHeight + rubyExtra;
 
   if (verticalMode) {
     // Vertical mode: columns placed right-to-left
-    const int columnWidth = lineHeight;  // column width = line height (character cell width)
-    const int columnSpacing = columnWidth / 4;
+    const int columnWidth = baseLineHeight + rubyExtra;
+    const int columnSpacing = baseLineHeight / 4;
 
     if (!currentPage) {
       currentPage.reset(new Page());

@@ -5,7 +5,8 @@
 #include <Serialization.h>
 #include <Utf8.h>
 #include <VerticalTextUtils.h>
-#include "fontIds.h"
+
+int TextBlock::rubyFontId = 0;
 
 void TextBlock::collectCodepoints(std::vector<uint32_t>& out, size_t max) const {
   if (max == 0 || out.size() >= max) {
@@ -77,10 +78,10 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
       if (isSingleCjk) {
         renderer.drawTextVertical(effectiveFontId, wx, wy, w, true, currentStyle);
         // 縦書きルビ描画（親文字の右側）
-        if (i < rubyTexts.size() && !rubyTexts[i].empty()) {
-          const int rubyFontId = SMALL_FONT_ID;
+        if (TextBlock::rubyFontId != 0 && i < rubyTexts.size() && !rubyTexts[i].empty()) {
+          const int rFontId = TextBlock::rubyFontId;
           const int rubyX = wx + columnWidth + 2;
-          renderer.drawTextVertical(rubyFontId, rubyX, wy, rubyTexts[i].c_str(), true, EpdFontFamily::REGULAR);
+          renderer.drawTextVertical(rFontId, rubyX, wy, rubyTexts[i].c_str(), true, EpdFontFamily::REGULAR);
         }
       } else {
         bool allDigits = true;
@@ -108,13 +109,13 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
       const int wordX = wordXpos[i] + x;
       renderer.drawText(effectiveFontId, wordX, y, words[i].c_str(), true, currentStyle);
       // 横書きルビ描画
-      if (i < rubyTexts.size() && !rubyTexts[i].empty()) {
-        const int rubyFontId = SMALL_FONT_ID;
+      if (TextBlock::rubyFontId != 0 && i < rubyTexts.size() && !rubyTexts[i].empty()) {
+        const int rFontId = TextBlock::rubyFontId;
         const int baseWidth = renderer.getTextAdvanceX(effectiveFontId, words[i].c_str(), currentStyle);
-        const int rubyWidth = renderer.getTextWidth(rubyFontId, rubyTexts[i].c_str(), EpdFontFamily::REGULAR);
+        const int rubyWidth = renderer.getTextWidth(rFontId, rubyTexts[i].c_str(), EpdFontFamily::REGULAR);
         const int rubyX = wordXpos[i] + x + (baseWidth - rubyWidth) / 2;
-        const int rubyY = y - renderer.getLineHeight(rubyFontId) - 1;
-        renderer.drawText(rubyFontId, rubyX, rubyY, rubyTexts[i].c_str(), true, EpdFontFamily::REGULAR);
+        const int rubyY = y - renderer.getLineHeight(rFontId) - 1;
+        renderer.drawText(rFontId, rubyX, rubyY, rubyTexts[i].c_str(), true, EpdFontFamily::REGULAR);
       }
 
       if ((currentStyle & EpdFontFamily::UNDERLINE) != 0) {

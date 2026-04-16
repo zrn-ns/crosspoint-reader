@@ -40,7 +40,7 @@ constexpr int NUM_UNDERLINE_TAGS = sizeof(UNDERLINE_TAGS) / sizeof(UNDERLINE_TAG
 const char* IMAGE_TAGS[] = {"img"};
 constexpr int NUM_IMAGE_TAGS = sizeof(IMAGE_TAGS) / sizeof(IMAGE_TAGS[0]);
 
-const char* SKIP_TAGS[] = {"head", "rt", "rp"};
+const char* SKIP_TAGS[] = {"head", "rp"};
 constexpr int NUM_SKIP_TAGS = sizeof(SKIP_TAGS) / sizeof(SKIP_TAGS[0]);
 
 bool isWhitespace(const char c) { return c == ' ' || c == '\r' || c == '\n' || c == '\t'; }
@@ -570,6 +570,23 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     }
   }
 
+  // Ruby tag handling
+  if (strcmp(name, "ruby") == 0) {
+    self->flushPartWordBuffer();
+    self->inRuby = true;
+    self->rubyStartWordIndex =
+        self->currentTextBlock ? static_cast<int>(self->currentTextBlock->size()) : 0;
+    self->rubyTextBuffer.clear();
+    self->depth += 1;
+    return;
+  }
+  if (strcmp(name, "rt") == 0) {
+    self->flushPartWordBuffer();
+    self->collectingRubyText = true;
+    self->depth += 1;
+    return;
+  }
+
   if (matches(name, SKIP_TAGS, NUM_SKIP_TAGS)) {
     // start skip
     self->skipUntilDepth = self->depth;
@@ -821,6 +838,12 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
 
   // Middle of skip
   if (self->skipUntilDepth < self->depth) {
+    return;
+  }
+
+  // Collect ruby text instead of normal word processing
+  if (self->collectingRubyText) {
+    self->rubyTextBuffer.append(s, len);
     return;
   }
 
@@ -1076,6 +1099,42 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
   }
 
   self->depth -= 1;
+
+  // Ruby closing tags
+  if (strcmp(name, "rt") == 0) {
+    self->collectingRubyText = false;
+  }
+  if (strcmp(name, "ruby") == 0 && self->inRuby && self->currentTextBlock) {
+    const int currentWordCount = static_cast<int>(self->currentTextBlock->size());
+    const int baseWordCount = currentWordCount - self->rubyStartWordIndex;
+    if (baseWordCount > 0 && !self->rubyTextBuffer.empty()) {
+      // Count UTF-8 characters in ruby text
+      std::vector<size_t> charOffsets;
+      const char* p = self->rubyTextBuffer.c_str();
+      while (*p) {
+        charOffsets.push_back(p - self->rubyTextBuffer.c_str());
+        if ((*p & 0x80) == 0) p += 1;
+        else if ((*p & 0xE0) == 0xC0) p += 2;
+        else if ((*p & 0xF0) == 0xE0) p += 3;
+        else p += 4;
+      }
+      charOffsets.push_back(self->rubyTextBuffer.size());
+      const int rubyCharCount = static_cast<int>(charOffsets.size() - 1);
+
+      for (int i = 0; i < baseWordCount; i++) {
+        const int start = i * rubyCharCount / baseWordCount;
+        const int end = (i + 1) * rubyCharCount / baseWordCount;
+        if (start < end) {
+          std::string portion = self->rubyTextBuffer.substr(
+              charOffsets[start], charOffsets[end] - charOffsets[start]);
+          self->currentTextBlock->setRubyForWordAt(self->rubyStartWordIndex + i, portion);
+        }
+      }
+    }
+    self->inRuby = false;
+    self->rubyStartWordIndex = -1;
+    self->rubyTextBuffer.clear();
+  }
 
   // Closing a footnote link — create entry from collected text and href
   if (self->insideFootnoteLink && self->depth == self->footnoteLinkDepth) {

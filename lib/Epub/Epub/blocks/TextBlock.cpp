@@ -53,6 +53,17 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
 
   const int effectiveFontId = (blockStyle.fontId != 0) ? blockStyle.fontId : fontId;
 
+  // ルビフォントのグリフをプリロード（SDカードフォントの場合）
+  if (rubyFontId != 0 && hasRuby() && renderer.isSdCardFont(rubyFontId)) {
+    std::string allRuby;
+    for (const auto& rt : rubyTexts) {
+      if (!rt.empty()) allRuby += rt;
+    }
+    if (!allRuby.empty()) {
+      renderer.ensureSdCardFontReady(rubyFontId, allRuby.c_str());
+    }
+  }
+
   // Compute column width once for Sideways/TateChuYoko centering
   int columnWidth = 0;
   if (isVertical) {

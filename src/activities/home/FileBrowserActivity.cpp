@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <variant>
 
 #include "../util/ConfirmationActivity.h"
 #include "CrossPointSettings.h"
@@ -251,33 +252,55 @@ void FileBrowserActivity::loop() {
       if (cleanBasePath.back() != '/') cleanBasePath += "/";
       const std::string fullPath = cleanBasePath + (isDirectory ? entry.substr(0, entry.length() - 1) : entry);
 
-      auto handler = [this, fullPath, isDirectory](const ActivityResult& res) {
+      auto handler = [this, fullPath, isDirectory, entry](const ActivityResult& res) {
         if (!res.isCancelled) {
+          // Right ボタン → 削除
           LOG_DBG("FileBrowser", "Attempting to delete: %s", fullPath.c_str());
           if (!isDirectory) clearFileMetadata(fullPath);
           const bool ok = isDirectory ? Storage.removeDir(fullPath.c_str()) : Storage.remove(fullPath.c_str());
           if (ok) {
             LOG_DBG("FileBrowser", "Deleted successfully");
-            loadFiles();
-            if (files.empty()) {
-              selectorIndex = 0;
-            } else if (selectorIndex >= files.size()) {
-              // Move selection to the new "last" item
-              selectorIndex = files.size() - 1;
-            }
-
-            requestUpdate(true);
           } else {
             LOG_ERR("FileBrowser", "Failed to delete file: %s", fullPath.c_str());
+            return;
+          }
+        } else if (std::holds_alternative<MenuResult>(res.data)) {
+          // Left ボタン → アーカイブ（/Archived/ に移動）
+          std::string filename = isDirectory ? entry.substr(0, entry.length() - 1) : entry;
+          std::string destPath = "/Archived/" + filename;
+          Storage.mkdir("/Archived");
+          // 同名ファイルが存在する場合は先に削除
+          if (Storage.exists(destPath.c_str())) {
+            isDirectory ? Storage.removeDir(destPath.c_str()) : Storage.remove(destPath.c_str());
+          }
+          if (!isDirectory) clearFileMetadata(fullPath);
+          if (Storage.rename(fullPath.c_str(), destPath.c_str())) {
+            LOG_DBG("FileBrowser", "Archived to: %s", destPath.c_str());
+          } else {
+            LOG_ERR("FileBrowser", "Failed to archive: %s", fullPath.c_str());
+            return;
           }
         } else {
-          LOG_DBG("FileBrowser", "Delete cancelled by user");
+          // Back ボタン → キャンセル
+          LOG_DBG("FileBrowser", "Action cancelled by user");
+          return;
         }
+        // 削除またはアーカイブ成功後、ファイル一覧を更新
+        loadFiles();
+        if (files.empty()) {
+          selectorIndex = 0;
+        } else if (selectorIndex >= files.size()) {
+          selectorIndex = files.size() - 1;
+        }
+        requestUpdate(true);
       };
 
-      std::string heading = tr(STR_DELETE) + std::string("? ");
+      std::string heading = entry;
 
-      startActivityForResult(std::make_unique<ConfirmationActivity>(renderer, mappedInput, heading, entry), handler);
+      startActivityForResult(
+          std::make_unique<ConfirmationActivity>(renderer, mappedInput, heading, "",
+                                                 tr(STR_ARCHIVE), tr(STR_DELETE), tr(STR_CANCEL)),
+          handler);
       return;
     } else {
       // --- SHORT PRESS ACTION: OPEN/NAVIGATE ---

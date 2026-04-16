@@ -8,12 +8,14 @@
 
 ConfirmationActivity::ConfirmationActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                            const std::string& heading, const std::string& body,
-                                           const std::string& neverLabel, const std::string& confirmLabel)
+                                           const std::string& neverLabel, const std::string& confirmLabel,
+                                           const std::string& backLabel)
     : Activity("Confirmation", renderer, mappedInput),
       heading(heading),
       body(body),
       neverLabel(neverLabel),
-      confirmLabel(confirmLabel) {}
+      confirmLabel(confirmLabel),
+      backLabel(backLabel) {}
 
 void ConfirmationActivity::onEnter() {
   Activity::onEnter();
@@ -56,9 +58,11 @@ void ConfirmationActivity::render(RenderLock&& lock) {
 
   // Draw UI Elements
   const char* confirmText = confirmLabel.empty() ? I18N.get(StrId::STR_CONFIRM) : confirmLabel.c_str();
+  const char* backText =
+      backLabel.empty() ? (neverLabel.empty() ? "" : I18N.get(StrId::STR_CLOSE_BOOK)) : backLabel.c_str();
   const auto labels = neverLabel.empty()
-                          ? mappedInput.mapLabels("", "", I18N.get(StrId::STR_CANCEL), confirmText)
-                          : mappedInput.mapLabels(I18N.get(StrId::STR_CLOSE_BOOK), "", neverLabel.c_str(), confirmText);
+                          ? mappedInput.mapLabels(backText, "", I18N.get(StrId::STR_CANCEL), confirmText)
+                          : mappedInput.mapLabels(backText, "", neverLabel.c_str(), confirmText);
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer(HalDisplay::RefreshMode::FAST_REFRESH);

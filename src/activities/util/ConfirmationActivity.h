@@ -19,6 +19,7 @@ class ConfirmationActivity : public Activity {
   std::string safeBody;
   std::string neverLabel;
   std::string confirmLabel;
+  std::string backLabel;
   int startY = 0;
   int lineHeight = 0;
 
@@ -28,7 +29,7 @@ class ConfirmationActivity : public Activity {
 
   ConfirmationActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& heading,
                        const std::string& body, const std::string& neverLabel = "",
-                       const std::string& confirmLabel = "");
+                       const std::string& confirmLabel = "", const std::string& backLabel = "");
 
   void onEnter() override;
   void loop() override;

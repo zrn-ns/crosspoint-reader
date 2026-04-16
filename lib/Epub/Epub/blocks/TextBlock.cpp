@@ -5,6 +5,7 @@
 #include <Serialization.h>
 #include <Utf8.h>
 #include <VerticalTextUtils.h>
+#include "fontIds.h"
 
 void TextBlock::collectCodepoints(std::vector<uint32_t>& out, size_t max) const {
   if (max == 0 || out.size() >= max) {
@@ -31,6 +32,13 @@ void TextBlock::collectCodepoints(std::vector<uint32_t>& out, size_t max) const 
       }
     }
   }
+}
+
+bool TextBlock::hasRuby() const {
+  for (const auto& rt : rubyTexts) {
+    if (!rt.empty()) return true;
+  }
+  return false;
 }
 
 void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int x, const int y,
@@ -68,6 +76,12 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
 
       if (isSingleCjk) {
         renderer.drawTextVertical(effectiveFontId, wx, wy, w, true, currentStyle);
+        // 縦書きルビ描画（親文字の右側）
+        if (i < rubyTexts.size() && !rubyTexts[i].empty()) {
+          const int rubyFontId = SMALL_FONT_ID;
+          const int rubyX = wx + columnWidth + 2;
+          renderer.drawTextVertical(rubyFontId, rubyX, wy, rubyTexts[i].c_str(), true, EpdFontFamily::REGULAR);
+        }
       } else {
         bool allDigits = true;
         int asciiCount = 0;
@@ -93,6 +107,15 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
     } else {
       const int wordX = wordXpos[i] + x;
       renderer.drawText(effectiveFontId, wordX, y, words[i].c_str(), true, currentStyle);
+      // 横書きルビ描画
+      if (i < rubyTexts.size() && !rubyTexts[i].empty()) {
+        const int rubyFontId = SMALL_FONT_ID;
+        const int baseWidth = renderer.getTextAdvanceX(effectiveFontId, words[i].c_str(), currentStyle);
+        const int rubyWidth = renderer.getTextWidth(rubyFontId, rubyTexts[i].c_str(), EpdFontFamily::REGULAR);
+        const int rubyX = wordXpos[i] + x + (baseWidth - rubyWidth) / 2;
+        const int rubyY = y - renderer.getLineHeight(rubyFontId) - 1;
+        renderer.drawText(rubyFontId, rubyX, rubyY, rubyTexts[i].c_str(), true, EpdFontFamily::REGULAR);
+      }
 
       if ((currentStyle & EpdFontFamily::UNDERLINE) != 0) {
         const std::string& w = words[i];
@@ -162,6 +185,11 @@ bool TextBlock::serialize(FsFile& file) const {
     for (auto y : wordYpos) serialization::writePod(file, y);
   }
 
+  // Ruby text data
+  for (size_t i = 0; i < words.size(); i++) {
+    serialization::writeString(file, (i < rubyTexts.size()) ? rubyTexts[i] : std::string());
+  }
+
   return true;
 }
 
@@ -215,6 +243,10 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(FsFile& file) {
     for (auto& y : wordYpos) serialization::readPod(file, y);
   }
 
+  // Ruby text data
+  std::vector<std::string> rubyTexts(wc);
+  for (auto& rt : rubyTexts) serialization::readString(file, rt);
+
   return std::unique_ptr<TextBlock>(new TextBlock(std::move(words), std::move(wordXpos), std::move(wordStyles),
-                                                  blockStyle, std::move(wordYpos), vertical));
+                                                  blockStyle, std::move(wordYpos), vertical, std::move(rubyTexts)));
 }

@@ -19,23 +19,28 @@ class TextBlock final : public Block {
   BlockStyle blockStyle;
   std::vector<int16_t> wordYpos;  // vertical layout: y position within column
   bool isVertical = false;        // true when this block was laid out vertically
+  std::vector<std::string> rubyTexts;
 
  public:
   explicit TextBlock(std::vector<std::string> words, std::vector<int16_t> word_xpos,
                      std::vector<EpdFontFamily::Style> word_styles, const BlockStyle& blockStyle = BlockStyle(),
-                     std::vector<int16_t> word_ypos = {}, bool vertical = false)
+                     std::vector<int16_t> word_ypos = {}, bool vertical = false,
+                     std::vector<std::string> ruby_texts = {})
       : words(std::move(words)),
         wordXpos(std::move(word_xpos)),
         wordStyles(std::move(word_styles)),
         blockStyle(blockStyle),
         wordYpos(std::move(word_ypos)),
-        isVertical(vertical) {}
+        isVertical(vertical),
+        rubyTexts(std::move(ruby_texts)) {}
   ~TextBlock() override = default;
   void setBlockStyle(const BlockStyle& blockStyle) { this->blockStyle = blockStyle; }
   const BlockStyle& getBlockStyle() const { return blockStyle; }
   const std::vector<std::string>& getWords() const { return words; }
   const std::vector<int16_t>& getWordYpos() const { return wordYpos; }
   bool getIsVertical() const { return isVertical; }
+  bool hasRuby() const;
+  const std::vector<std::string>& getRubyTexts() const { return rubyTexts; }
   bool isEmpty() override { return words.empty(); }
   size_t wordCount() const { return words.size(); }
   // given a renderer works out where to break the words into lines

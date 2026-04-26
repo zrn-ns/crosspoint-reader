@@ -42,8 +42,8 @@ void SdCardFontSystem::begin(GfxRenderer& renderer) {
       uint8_t basePt = fontSizeEnumToPt(SETTINGS.horizontal.fontSize);
       uint8_t headingPt = computeHeadingBasePt(SETTINGS.horizontal.fontSize);
       if (manager_.loadFamily(*family, renderer, basePt, headingPt)) {
-        LOG_DBG("SDFS", "Loaded SD card font family: %s (base=%upt, heading=%upt)", SETTINGS.horizontal.sdFontFamilyName,
-                basePt, headingPt);
+        LOG_DBG("SDFS", "Loaded SD card font family: %s (base=%upt, heading=%upt)",
+                SETTINGS.horizontal.sdFontFamilyName, basePt, headingPt);
       } else {
         LOG_ERR("SDFS", "Failed to load SD font family: %s (clearing)", SETTINGS.horizontal.sdFontFamilyName);
         SETTINGS.horizontal.sdFontFamilyName[0] = '\0';

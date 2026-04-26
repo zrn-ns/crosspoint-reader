@@ -5,8 +5,8 @@
 #include <vector>
 
 #include "../Activity.h"
-#include "RecentBooksStore.h"
 #include "ReadingStatusHelper.h"
+#include "RecentBooksStore.h"
 #include "util/ButtonNavigator.h"
 
 class FileBrowserActivity final : public Activity {

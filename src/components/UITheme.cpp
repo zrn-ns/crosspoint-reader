@@ -6,9 +6,8 @@
 
 #include <memory>
 
-#include "ReadingStatusHelper.h"
-
 #include "MappedInputManager.h"
+#include "ReadingStatusHelper.h"
 #include "RecentBooksStore.h"
 #include "components/themes/BaseTheme.h"
 #include "components/themes/lyra/Lyra3CoversTheme.h"

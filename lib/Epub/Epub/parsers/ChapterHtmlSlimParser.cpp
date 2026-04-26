@@ -10,8 +10,8 @@
 
 #include "../../Epub.h"
 #include "../Page.h"
-#include "../blocks/TextBlock.h"
 #include "../blocks/TableRowBlock.h"
+#include "../blocks/TextBlock.h"
 #include "../converters/ImageDecoderFactory.h"
 #include "../converters/ImageToFramebufferDecoder.h"
 #include "../htmlEntities.h"
@@ -575,8 +575,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
   if (strcmp(name, "ruby") == 0) {
     self->flushPartWordBuffer();
     self->inRuby = true;
-    self->rubyStartWordIndex =
-        self->currentTextBlock ? static_cast<int>(self->currentTextBlock->size()) : 0;
+    self->rubyStartWordIndex = self->currentTextBlock ? static_cast<int>(self->currentTextBlock->size()) : 0;
     self->rubyTextBuffer.clear();
     self->depth += 1;
     return;
@@ -1114,10 +1113,14 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
       const char* p = self->rubyTextBuffer.c_str();
       while (*p) {
         charOffsets.push_back(p - self->rubyTextBuffer.c_str());
-        if ((*p & 0x80) == 0) p += 1;
-        else if ((*p & 0xE0) == 0xC0) p += 2;
-        else if ((*p & 0xF0) == 0xE0) p += 3;
-        else p += 4;
+        if ((*p & 0x80) == 0)
+          p += 1;
+        else if ((*p & 0xE0) == 0xC0)
+          p += 2;
+        else if ((*p & 0xF0) == 0xE0)
+          p += 3;
+        else
+          p += 4;
       }
       charOffsets.push_back(self->rubyTextBuffer.size());
       const int rubyCharCount = static_cast<int>(charOffsets.size() - 1);
@@ -1126,8 +1129,7 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
         const int start = i * rubyCharCount / baseWordCount;
         const int end = (i + 1) * rubyCharCount / baseWordCount;
         if (start < end) {
-          std::string portion = self->rubyTextBuffer.substr(
-              charOffsets[start], charOffsets[end] - charOffsets[start]);
+          std::string portion = self->rubyTextBuffer.substr(charOffsets[start], charOffsets[end] - charOffsets[start]);
           self->currentTextBlock->setRubyForWordAt(self->rubyStartWordIndex + i, portion);
         }
       }

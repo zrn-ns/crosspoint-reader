@@ -3,11 +3,11 @@
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
-#include "ReadingStatusHelper.h"
 
 #include <algorithm>
 
 #include "MappedInputManager.h"
+#include "ReadingStatusHelper.h"
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"

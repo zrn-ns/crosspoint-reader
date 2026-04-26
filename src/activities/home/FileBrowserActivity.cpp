@@ -2,7 +2,6 @@
 
 #include <Epub.h>
 #include <FsHelpers.h>
-#include "ReadingStatusHelper.h"
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
@@ -17,6 +16,7 @@
 #include "../util/ConfirmationActivity.h"
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
+#include "ReadingStatusHelper.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -313,11 +313,9 @@ void FileBrowserActivity::loop() {
 
       // ディレクトリには既読操作を提供しない（btn2を空にする）
       const char* markAsReadLabel = isDirectory ? "" : tr(STR_MARK_AS_READ);
-      startActivityForResult(
-          std::make_unique<ConfirmationActivity>(renderer, mappedInput, heading, "",
-                                                 tr(STR_ARCHIVE), tr(STR_DELETE), tr(STR_CANCEL),
-                                                 markAsReadLabel),
-          handler);
+      startActivityForResult(std::make_unique<ConfirmationActivity>(renderer, mappedInput, heading, "", tr(STR_ARCHIVE),
+                                                                    tr(STR_DELETE), tr(STR_CANCEL), markAsReadLabel),
+                             handler);
       return;
     } else {
       // --- SHORT PRESS ACTION: OPEN/NAVIGATE ---

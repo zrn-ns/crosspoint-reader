@@ -689,7 +689,6 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     }
   }
 
-  processLine(
-      std::make_shared<TextBlock>(std::move(lineWords), std::move(lineXPos), std::move(lineWordStyles), blockStyle,
-                                  std::vector<int16_t>{}, false, std::move(lineRubyTexts)));
+  processLine(std::make_shared<TextBlock>(std::move(lineWords), std::move(lineXPos), std::move(lineWordStyles),
+                                          blockStyle, std::vector<int16_t>{}, false, std::move(lineRubyTexts)));
 }

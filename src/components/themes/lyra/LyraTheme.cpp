@@ -14,8 +14,8 @@
 #include "components/UITheme.h"
 #include "components/icons/book.h"
 #include "components/icons/book24.h"
-#include "components/icons/book_reading24.h"
 #include "components/icons/book_finished24.h"
+#include "components/icons/book_reading24.h"
 #include "components/icons/cover.h"
 #include "components/icons/file24.h"
 #include "components/icons/folder.h"
@@ -199,8 +199,7 @@ void LyraTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
   }
 
   if (subtitle) {
-    auto truncatedSubtitle =
-        renderer.truncatedText(SMALL_FONT_ID, subtitle, usableWidth, EpdFontFamily::REGULAR);
+    auto truncatedSubtitle = renderer.truncatedText(SMALL_FONT_ID, subtitle, usableWidth, EpdFontFamily::REGULAR);
     int truncatedSubtitleWidth = renderer.getTextWidth(SMALL_FONT_ID, truncatedSubtitle.c_str());
     renderer.drawText(SMALL_FONT_ID,
                       rect.x + rect.width - LyraMetrics::values.contentSidePadding - truncatedSubtitleWidth,

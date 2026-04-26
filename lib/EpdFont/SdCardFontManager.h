@@ -49,7 +49,7 @@ class SdCardFontManager {
 
   std::string loadedFamilyName_;
   std::vector<LoadedFont> loaded_;
-  std::vector<int> virtualFontIds_;      // 全仮想fontId（unload時に全削除用）
-  uint8_t loadedBasePt_ = 0;            // 現在ロード中のprimaryベース.cpfontのptサイズ
-  uint8_t loadedHeadingBasePt_ = 0;     // 現在ロード中のheadingベース.cpfontのptサイズ（0=未使用）
+  std::vector<int> virtualFontIds_;  // 全仮想fontId（unload時に全削除用）
+  uint8_t loadedBasePt_ = 0;         // 現在ロード中のprimaryベース.cpfontのptサイズ
+  uint8_t loadedHeadingBasePt_ = 0;  // 現在ロード中のheadingベース.cpfontのptサイズ（0=未使用）
 };

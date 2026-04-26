@@ -87,15 +87,17 @@ void XtcReaderActivity::loop() {
               break;
             }
             case XtcReaderMenuActivity::MenuAction::GO_TO_PERCENT: {
-              const int percent = xtc->getPageCount() > 0
-                                      ? static_cast<int>(static_cast<float>(currentPage) / xtc->getPageCount() * 100.0f + 0.5f)
-                                      : 0;
+              const int percent =
+                  xtc->getPageCount() > 0
+                      ? static_cast<int>(static_cast<float>(currentPage) / xtc->getPageCount() * 100.0f + 0.5f)
+                      : 0;
               startActivityForResult(
                   std::make_unique<EpubReaderPercentSelectionActivity>(renderer, mappedInput, percent),
                   [this](const ActivityResult& percentResult) {
                     if (!percentResult.isCancelled) {
                       const int selectedPercent = std::get<PercentResult>(percentResult.data).percent;
-                      currentPage = static_cast<uint32_t>(static_cast<float>(selectedPercent) / 100.0f * xtc->getPageCount());
+                      currentPage =
+                          static_cast<uint32_t>(static_cast<float>(selectedPercent) / 100.0f * xtc->getPageCount());
                       if (currentPage >= xtc->getPageCount() && xtc->getPageCount() > 0) {
                         currentPage = xtc->getPageCount() - 1;
                       }
@@ -194,8 +196,7 @@ void XtcReaderActivity::render(RenderLock&&) {
 
   renderPage();
   {
-    bool nearEnd = xtc && xtc->getPageCount() > 0 &&
-                   static_cast<float>(currentPage + 1) / xtc->getPageCount() >= 0.95f;
+    bool nearEnd = xtc && xtc->getPageCount() > 0 && static_cast<float>(currentPage + 1) / xtc->getPageCount() >= 0.95f;
     saveProgress(nearEnd);
   }
 }

@@ -10,13 +10,7 @@
 
 class XtcReaderMenuActivity final : public Activity {
  public:
-  enum class MenuAction {
-    SELECT_CHAPTER,
-    GO_TO_PERCENT,
-    SCREENSHOT,
-    GO_HOME,
-    TILT_PAGE_TURN
-  };
+  enum class MenuAction { SELECT_CHAPTER, GO_TO_PERCENT, SCREENSHOT, GO_HOME, TILT_PAGE_TURN };
 
   explicit XtcReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title,
                                  uint32_t currentPage, uint32_t totalPages, bool hasChapters);

@@ -339,9 +339,8 @@ void LyraTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
       const int actualIconSize = isReadingStatusIcon ? listIconSize : iconSize;
       const uint8_t* iconBitmap = iconForName(icon, actualIconSize);
       if (iconBitmap != nullptr) {
-        const int actualIconY = (rowSubtitle != nullptr && isReadingStatusIcon)
-                                    ? itemY + (rowHeight - actualIconSize) / 2
-                                    : itemY + iconY;
+        const int actualIconY =
+            (rowSubtitle != nullptr && isReadingStatusIcon) ? itemY + (rowHeight - actualIconSize) / 2 : itemY + iconY;
         renderer.drawIcon(iconBitmap, rect.x + LyraMetrics::values.contentSidePadding + hPaddingInSelection,
                           actualIconY, actualIconSize, actualIconSize);
       }

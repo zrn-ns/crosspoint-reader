@@ -2388,13 +2388,13 @@
       const isTiny = (dims.width < 200 && dims.height < 200);
       
       // Images that fit screen can only rotate, not split
-      const fitsScreen = (dims.width <= 480 && dims.height <= 800);
-      
+      const fitsScreen = (dims.width <= MAX_WIDTH && dims.height <= MAX_HEIGHT);
+
       // Split capability - no upscaling allowed
-      // H-Split scales width to 800, so needs width >= 800
-      // V-Split scales height to 800, so needs height >= 800
-      const canHSplit = dims.width >= 800;
-      const canVSplit = dims.height >= 800;
+      // H-Split scales width to MAX_HEIGHT, so needs width >= MAX_HEIGHT
+      // V-Split scales height to MAX_HEIGHT, so needs height >= MAX_HEIGHT
+      const canHSplit = dims.width >= MAX_HEIGHT;
+      const canVSplit = dims.height >= MAX_HEIGHT;
 
       images.push({
         path: path,

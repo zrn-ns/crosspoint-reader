@@ -3326,10 +3326,24 @@ async function fetchVersion() {
       crosspointVersion = data.version || 'Unknown';
       if (data.screenWidth) deviceScreenWidth = data.screenWidth;
       if (data.screenHeight) deviceScreenHeight = data.screenHeight;
+      updateOptimizerDimensions();
     }
   } catch (e) {
     console.error('Failed to fetch version:', e);
   }
+}
+
+// Optimize EPUBは常に縦向き読書を想定: 短辺=MAX_WIDTH, 長辺=MAX_HEIGHT
+// デバイス向きに依存しないよう min/max で正規化する
+function updateOptimizerDimensions() {
+  MAX_WIDTH  = Math.min(deviceScreenWidth, deviceScreenHeight);
+  MAX_HEIGHT = Math.max(deviceScreenWidth, deviceScreenHeight);
+  updateOptimizerLabel();
+}
+
+function updateOptimizerLabel() {
+  const el = document.getElementById('optimizerResolutionInfo');
+  if (el) el.textContent = `📏 Max ${MAX_WIDTH}×${MAX_HEIGHT}px`;
 }
 
 // Batch logging system for multiple files

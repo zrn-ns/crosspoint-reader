@@ -360,11 +360,14 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  // At end of the book, forward button shows archive/delete prompt and back button returns to last page
+  // At end of the book, forward direction shows archive/delete prompt and back direction returns to last page.
+  // 縦書きモードでは物理ボタンと進む方向が逆転する（pageTurn() の挙動と揃える）
   if (currentSpineIndex > 0 && currentSpineIndex >= epub->getSpineItemsCount()) {
-    if (nextTriggered) {
+    const bool advanceTriggered = verticalMode ? prevTriggered : nextTriggered;
+    const bool retreatTriggered = verticalMode ? nextTriggered : prevTriggered;
+    if (advanceTriggered) {
       showEndOfBookConfirmation();
-    } else {
+    } else if (retreatTriggered) {
       currentSpineIndex = epub->getSpineItemsCount() - 1;
       nextPageNumber = UINT16_MAX;
       requestUpdate();

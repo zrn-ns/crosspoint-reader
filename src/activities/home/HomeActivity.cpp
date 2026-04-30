@@ -15,6 +15,7 @@
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "MappedInputManager.h"
+#include "OpdsServerStore.h"
 #include "ReadingStatusHelper.h"
 #include "RecentBooksStore.h"
 #include "activities/settings/AozoraActivity.h"
@@ -115,8 +116,8 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
 void HomeActivity::onEnter() {
   Activity::onEnter();
 
-  // Check if OPDS browser URL is configured
-  hasOpdsUrl = strlen(SETTINGS.opdsServerUrl) > 0;
+  // Check if any OPDS server is configured
+  hasOpdsUrl = !OPDS_STORE.getServers().empty();
 
   selectorIndex = 0;
 

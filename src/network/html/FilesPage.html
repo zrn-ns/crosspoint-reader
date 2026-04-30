@@ -1542,7 +1542,7 @@
           <div class="convert-settings" id="convertSettings" style="display:block;">
             <span>⚫ True-Grayscale</span>
           <span id="optimizerResolutionInfo">📏 Max 480×800px</span>
-          <span>📦 85% JPEG</span>
+          <span>📦 90% JPEG</span>
           <span>🔧 Fix SVG</span>
         </div>
         <!-- Advanced Settings Content -->
@@ -1555,12 +1555,13 @@
               <button class="quality-preset" data-value="45" onclick="setQualityPreset(45)" title="Low quality">45%</button>
               <button class="quality-preset" data-value="60" onclick="setQualityPreset(60)" title="Medium-low quality">60%</button>
               <button class="quality-preset" data-value="75" onclick="setQualityPreset(75)" title="Medium quality">75%</button>
-              <button class="quality-preset active" data-value="85" onclick="setQualityPreset(85)" title="High quality">85%</button>
+              <button class="quality-preset" data-value="85" onclick="setQualityPreset(85)" title="High quality">85%</button>
+              <button class="quality-preset active" data-value="90" onclick="setQualityPreset(90)" title="High quality (e-ink default)">90%</button>
               <button class="quality-preset" data-value="95" onclick="setQualityPreset(95)" title="Maximum quality">95%</button>
             </div>
             <!-- Hidden inputs to maintain compatibility -->
-            <input type="hidden" id="qualitySlider" value="85">
-            <input type="hidden" id="qualityInput" value="85">
+            <input type="hidden" id="qualitySlider" value="90">
+            <input type="hidden" id="qualityInput" value="90">
           </div>
           <!-- Grayscale Toggle (commented for e-ink optimization, kept for compatibility with other devices/web apps)
           <div class="advanced-setting-row" style="display:none;">
@@ -1969,7 +1970,7 @@
   function openUploadModal() {
     // Reset converter variables to defaults
     ENABLE_GRAYSCALE = true;
-    JPEG_QUALITY = 85;
+    JPEG_QUALITY = 90;
     HANDEDNESS = 'right';
     OVERLAP_PERCENT = 5;
     imageStates = {};
@@ -2066,8 +2067,8 @@
       advancedOptionsToggle.style.pointerEvents = 'none';
     }
     // Reset to defaults
-    document.getElementById('qualitySlider').value = 85;
-    document.getElementById('qualityInput').value = 85;
+    document.getElementById('qualitySlider').value = 90;
+    document.getElementById('qualityInput').value = 90;
     setHandedness('right');
     setOverlap(5);
     // Update converter variables
@@ -3289,7 +3290,7 @@ function buildXtcContainer(pagesData, width, height, isRtl, sourceFilename) {
 // Default conversion settings
 const DEFAULT_MAX_WIDTH = 480;
 const DEFAULT_MAX_HEIGHT = 800;
-const DEFAULT_JPEG_QUALITY = 85;
+const DEFAULT_JPEG_QUALITY = 90;
 const DEFAULT_ENABLE_GRAYSCALE = true;
 // Note: Overlap is now always centered distribution (min 5%)
 

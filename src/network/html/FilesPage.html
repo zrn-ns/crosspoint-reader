@@ -1526,7 +1526,7 @@
         <div class="convert-options" id="convertOptions" style="display:none;">
           <div class="convert-row">
             <label class="convert-checkbox">
-              <input type="checkbox" id="convertBeforeUpload" onchange="toggleConvertOptions()">
+              <input type="checkbox" id="convertBeforeUpload" checked onchange="toggleConvertOptions()">
               <span>Optimize EPUB</span>
             </label>
             <span class="convert-separator">—</span>
@@ -2040,7 +2040,7 @@
     document.getElementById('progress-container').style.display = 'none';
     document.getElementById('progress-fill').style.width = '0%';
     document.getElementById('progress-fill').style.backgroundColor = '#27ae60';
-    document.getElementById('convertBeforeUpload').checked = false;
+    document.getElementById('convertBeforeUpload').checked = true;
     document.getElementById('convertInfo').style.display = 'none';
     document.getElementById('convertWarning').style.display = 'none';
     // Reset XTC conversion UI
@@ -2964,6 +2964,8 @@
     // Show/hide convert options based on file types
     if (files.length > 0 && hasEpub) {
       convertOptions.style.display = 'block';
+      // チェックボックスのデフォルトON状態をボタンラベルと詳細設定UIに反映
+      toggleConvertOptions();
     } else {
       convertOptions.style.display = 'none';
       clearImagePicker();
